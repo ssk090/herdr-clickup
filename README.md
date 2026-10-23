@@ -114,7 +114,8 @@ herdr plugin log list --plugin ssk090.clickup
 Building from source needs Rust 1.89 or later (edition 2024 and let-chains).
 
 ClickUp rate limits (HTTP 429) wait for `X-RateLimit-Reset` or `Retry-After` and retry up to four
-times. The board loads at most four spaces at a time.
+times. The board loads at most four spaces at a time. Calls time out after 10 seconds to connect and
+30 seconds to read.
 
 The board caches the hierarchy and each task list in `$HERDR_PLUGIN_STATE_DIR/cache/`. It shows the
 cache at once, marked `(cached)`, and refreshes it in the background.

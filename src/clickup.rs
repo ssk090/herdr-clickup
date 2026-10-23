@@ -11,6 +11,8 @@ use std::{
 const API: &str = "https://api.clickup.com/api/v2";
 const MAX_RETRIES: u32 = 4;
 const MAX_WAIT_SECS: u64 = 60;
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const READ_TIMEOUT: Duration = Duration::from_secs(30);
 
 fn header(resp: &ureq::http::Response<ureq::Body>, name: &str) -> Option<String> {
     resp.headers()
@@ -51,6 +53,9 @@ impl ClickUp {
     pub fn new(token: String, team_id: Option<String>) -> Self {
         let agent = ureq::Agent::config_builder()
             .http_status_as_error(false)
+            .timeout_connect(Some(CONNECT_TIMEOUT))
+            .timeout_recv_response(Some(READ_TIMEOUT))
+            .timeout_recv_body(Some(READ_TIMEOUT))
             .build()
             .into();
         ClickUp {
@@ -67,7 +72,7 @@ impl ClickUp {
                 .get(&format!("{API}{path}"))
                 .header("Authorization", &self.token)
                 .call()
-                .with_context(|| format!("GET {path}"))?;
+                .with_context(|| format!("GET {path} (10s connect, 30s read)"))?;
             let status = resp.status().as_u16();
             if status == 429 && attempt < MAX_RETRIES {
                 let reset = header(&resp, "x-ratelimit-reset");
@@ -98,7 +103,7 @@ impl ClickUp {
             let mut resp = req
                 .header("Authorization", &self.token)
                 .send_json(&body)
-                .with_context(|| format!("{method} {path}"))?;
+                .with_context(|| format!("{method} {path} (10s connect, 30s read)"))?;
             let status = resp.status().as_u16();
             if status == 429 && attempt < MAX_RETRIES {
                 let reset = header(&resp, "x-ratelimit-reset");
