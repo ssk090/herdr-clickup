@@ -187,3 +187,56 @@ fn two_repos_with_the_same_name_get_distinct_folders() {
     assert_eq!(names, ["webui", "webui-2"]);
     assert!(remove_worktrees(&added).is_empty());
 }
+
+#[test]
+fn a_worktree_starts_from_the_remote_default_branch() {
+    let root = temp("origin-head");
+    let bare = root.join("remote.git");
+    let out = Command::new("git")
+        .args(["init", "--bare", "-q", "--initial-branch=main"])
+        .arg(&bare)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let repo_dir = root.join("webui");
+    let out = Command::new("git")
+        .args(["clone", "-q"])
+        .arg(&bare)
+        .arg(&repo_dir)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    run(&repo_dir, &["config", "user.email", "test@example.com"]);
+    run(&repo_dir, &["config", "user.name", "Test"]);
+    fs::write(repo_dir.join("README.md"), "remote\n").unwrap();
+    run(&repo_dir, &["add", "."]);
+    run(&repo_dir, &["commit", "-qm", "init"]);
+    run(&repo_dir, &["push", "-qu", "origin", "main"]);
+    run(&repo_dir, &["remote", "set-head", "origin", "main"]);
+    assert_eq!(base_ref(repo_dir.to_str().unwrap()), "origin/HEAD");
+    let added = add_worktrees(
+        &root.join("task"),
+        &[repo_dir.display().to_string()],
+        "CU-2-fix",
+        &[],
+    )
+    .unwrap();
+    let head = Command::new("git")
+        .args(["-C", &added[0].path, "rev-parse", "HEAD"])
+        .output()
+        .unwrap();
+    let remote = Command::new("git")
+        .args(["-C", &added[0].path, "rev-parse", "origin/main"])
+        .output()
+        .unwrap();
+    assert_eq!(head.stdout, remote.stdout);
+    assert!(remove_worktrees(&added).is_empty());
+}
