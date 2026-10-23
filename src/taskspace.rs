@@ -114,6 +114,10 @@ pub fn add_worktrees(
 pub fn remove_worktrees(worktrees: &[RepoWorktree]) -> Vec<String> {
     let mut failed = Vec::new();
     for w in worktrees {
+        // Already removed by an earlier attempt: nothing left to do.
+        if !Path::new(&w.path).exists() {
+            continue;
+        }
         if let Err(e) = git(&w.repo, &["worktree", "remove", "--force", &w.path]) {
             failed.push(format!("{}: {e:#}", w.repo));
         }

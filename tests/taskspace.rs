@@ -154,4 +154,8 @@ fn worktrees_are_created_detected_dirty_and_removed() {
     assert!(again.is_empty(), "a repo already in the task is skipped");
     assert!(remove_worktrees(&added).is_empty());
     assert!(added.iter().all(|w| !Path::new(&w.path).exists()));
+    assert!(
+        remove_worktrees(&added).is_empty(),
+        "a retry after a partial close is harmless"
+    );
 }

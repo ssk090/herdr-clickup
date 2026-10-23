@@ -121,6 +121,12 @@ pub fn start(
             let ticket_rel = relative(dir_path, &change_dir.join("clickup.md"));
             let repos_rel = relative(dir_path, &change_dir.join("repos.txt"));
             let mut prompt = spec_prompt(task, &change, &ticket_rel);
+            let host_rel = relative(dir_path, Path::new(&host));
+            if host_rel != "." {
+                prompt.push_str(&format!(
+                    "\n\nThe OpenSpec change lives in `{host_rel}`. Run every `openspec` command from `{host_rel}`."
+                ));
+            }
             prompt.push_str(&format!(
                 "\n\nThe repos this task can touch are in {repos_rel}: one absolute path per line. Edit that list so it holds exactly the repos the change affects; implementation creates a worktree for each. Do not change code in any repo."
             ));
@@ -221,10 +227,9 @@ pub fn implement(pane_id: &str, change: &str) -> Result<String> {
     if !matches!(herdr::agent_status(pane_id)?.as_str(), "idle" | "done") {
         bail!("the agent is still working; wait for it to finish before implementing");
     }
+    let folder = link.folder().map(str::to_string);
     let mut all = link.worktrees.clone();
-    if let Some(folder) = link.folder()
-        && let Some(host) = link.worktrees.first()
-    {
+    if let (Some(folder), Some(host)) = (folder.as_deref(), link.worktrees.first()) {
         let change_dir = Path::new(&host.path)
             .join("openspec")
             .join("changes")
@@ -232,17 +237,23 @@ pub fn implement(pane_id: &str, change: &str) -> Result<String> {
         let repos = taskspace::read_repos(&change_dir)?;
         let added =
             taskspace::add_worktrees(Path::new(folder), &repos, &link.branch, &link.worktrees)?;
-        all.extend(added);
-        if all.len() > link.worktrees.len() {
-            taskspace::write_agents_md(
-                Path::new(folder),
-                &link.title,
-                &link.url,
-                &link.branch,
-                &all,
-                &link.agent,
-            )?;
+        if !added.is_empty() {
+            all.extend(added.clone());
+            // Record the new worktrees before anything else can fail, so close can remove them.
+            store::update(|state| {
+                if let Some(l) = state.panes.get_mut(pane_id) {
+                    l.worktrees.extend(added);
+                }
+            })?;
         }
+        taskspace::write_agents_md(
+            Path::new(folder),
+            &link.title,
+            &link.url,
+            &link.branch,
+            &all,
+            &link.agent,
+        )?;
     }
     // Claim the next finish while the link is still reviewed; a second `i` claims nothing.
     let claimed = store::update(|state| {
@@ -261,7 +272,16 @@ pub fn implement(pane_id: &str, change: &str) -> Result<String> {
             "the spec agent is still working, or the change is no longer ready; try again when it is idle"
         );
     }
-    if let Err(e) = herdr::prompt_agent(pane_id, &apply_prompt(change)) {
+    let mut prompt = apply_prompt(change);
+    if let (Some(folder), Some(host)) = (folder.as_deref(), link.worktrees.first()) {
+        let host_rel = relative(Path::new(folder), Path::new(&host.path));
+        if host_rel != "." {
+            prompt.push_str(&format!(
+                "\n\nRun every `openspec` command from `{host_rel}`, the repo that holds the change."
+            ));
+        }
+    }
+    if let Err(e) = herdr::prompt_agent(pane_id, &prompt) {
         let _ = store::update(|state| {
             if let Some(l) = state.panes.get_mut(pane_id) {
                 l.phase = Some(Phase::SpecDrafted);
@@ -290,6 +310,12 @@ pub fn add_repo(task_id: &str, repo: &str) -> Result<String> {
     };
     let mut all = link.worktrees.clone();
     all.push(added.clone());
+    // Record it first, so a later failure still lets close remove the checkout.
+    store::update(|state| {
+        if let Some(l) = state.panes.get_mut(&pane) {
+            l.worktrees.push(added.clone());
+        }
+    })?;
     taskspace::write_agents_md(
         Path::new(folder),
         &link.title,
@@ -307,11 +333,6 @@ pub fn add_repo(task_id: &str, repo: &str) -> Result<String> {
             taskspace::add_repo(&change_dir, repo)?;
         }
     }
-    store::update(|state| {
-        if let Some(l) = state.panes.get_mut(&pane) {
-            l.worktrees.push(added.clone());
-        }
-    })?;
     Ok(format!(
         "added {} at {}",
         taskspace::repo_name(repo),
