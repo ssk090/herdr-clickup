@@ -921,7 +921,7 @@ impl Board {
         title.push_str(if loading { " (loading…) " } else { " " });
         let widths = [
             Constraint::Length(16),
-            Constraint::Length(8),
+            Constraint::Length(7),
             Constraint::Min(20),
             Constraint::Length(18),
         ];
