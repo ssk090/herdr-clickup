@@ -1,4 +1,4 @@
-use herdr_clickup::hierarchy::{parse_space_lists, ListRef};
+use herdr_clickup::hierarchy::{ListRef, parse_space_lists};
 use serde_json::json;
 
 // Trimmed from real responses: ClickUp sends dates as strings of ms.
@@ -67,10 +67,18 @@ fn empty_responses_give_no_lists() {
 }
 
 mod sprints {
-    use herdr_clickup::hierarchy::{current_sprints, ListRef};
+    use herdr_clickup::hierarchy::{ListRef, current_sprints};
 
     fn list(id: &str, start: Option<i64>, due: Option<i64>) -> ListRef {
-        ListRef { id: id.into(), name: id.into(), space: "S".into(), folder: None, start, due, task_count: None }
+        ListRef {
+            id: id.into(),
+            name: id.into(),
+            space: "S".into(),
+            folder: None,
+            start,
+            due,
+            task_count: None,
+        }
     }
 
     fn ids(v: Vec<&ListRef>) -> Vec<&str> {
@@ -86,12 +94,18 @@ mod sprints {
             list("future", Some(101), Some(300)),
             list("not-a-sprint", None, None),
         ];
-        assert_eq!(ids(current_sprints(&lists, 100)), ["starts-now", "ends-now"]);
+        assert_eq!(
+            ids(current_sprints(&lists, 100)),
+            ["starts-now", "ends-now"]
+        );
     }
 
     #[test]
     fn a_list_needs_both_dates_to_be_a_sprint() {
-        let lists = [list("only-start", Some(0), None), list("only-due", None, Some(1000))];
+        let lists = [
+            list("only-start", Some(0), None),
+            list("only-due", None, Some(1000)),
+        ];
         assert!(current_sprints(&lists, 10).is_empty());
     }
 }
