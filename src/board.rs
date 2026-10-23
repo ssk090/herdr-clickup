@@ -251,6 +251,8 @@ impl Board {
             Effect::DiscardUpdate(task) => self.discard(task),
             Effect::EditDraft { task, update } => self.edit_request = Some((task, update)),
             Effect::LoadDetail(task) => self.load_detail(task),
+            Effect::ChooseTeam => self.choose_team(),
+            Effect::SwitchTeam { id, name } => self.switch_team(id, name),
             Effect::OpenUrl(url) => {
                 if let Err(e) = app::open_url(&url) {
                     self.state.status = format!("could not open the browser: {e:#}");
@@ -271,6 +273,25 @@ impl Board {
             };
             let _ = tx.send(Msg::Detail(id, ticket, statuses));
         });
+    }
+
+    fn choose_team(&mut self) {
+        let (cu, tx) = (self.cu.clone(), self.tx.clone());
+        thread::spawn(move || {
+            let _ = tx.send(Msg::Teams(cu.teams()));
+        });
+    }
+
+    fn switch_team(&mut self, id: String, name: String) {
+        store::remember("team", &id);
+        self.cu = ClickUp::new(self.cfg.token.clone(), Some(id));
+        if let Some(dir) = cache::state_dir() {
+            cache::clear(&dir);
+        }
+        self.state.switch_team();
+        self.state.status = format!("workspace: {name}");
+        self.load_hierarchy();
+        self.load_tasks(Source::Mine, false);
     }
 
     fn choose_agent(&mut self, task: Task, mode: Mode) {
@@ -431,6 +452,10 @@ impl Board {
             Modal::Status { choices, sel, .. } => {
                 draw_choices(f, " Change status to ", choices, *sel)
             }
+            Modal::Team { choices, sel } => {
+                let labels: Vec<String> = choices.iter().map(|(_, name)| name.clone()).collect();
+                draw_choices(f, " ClickUp workspace ", &labels, *sel)
+            }
         }
     }
 
@@ -557,7 +582,7 @@ impl Board {
         } else if !self.state.status.is_empty() {
             Line::from(format!(" {}", self.state.status)).fg(Color::Yellow)
         } else {
-            let mut help = " ↑↓ move  ⏎ open  s spec  c code  C closed  A add repo  X close  u review ✉  o browser  / filter  m mine  a assignee  r refresh  q quit".to_string();
+            let mut help = " ↑↓ move  ⏎ open  s spec  c code  C closed  W workspace  A add repo  X close  u review ✉  o browser  / filter  m mine  a assignee  r refresh  q quit".to_string();
             if self.state.can_implement() {
                 help.push_str("  i implement");
             }

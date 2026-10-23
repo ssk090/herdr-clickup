@@ -1,4 +1,6 @@
-use herdr_clickup::clickup::{is_custom_id, parse_statuses, rate_limit_wait, task_path};
+use herdr_clickup::clickup::{
+    is_custom_id, parse_statuses, parse_teams, rate_limit_wait, task_path,
+};
 use serde_json::json;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -50,4 +52,21 @@ fn a_custom_id_adds_the_team_and_the_flag() {
         "/task/ABC-123/comment?custom_task_ids=true&team_id=901"
     );
     assert_eq!(task_path("86c1abcd", "901", "", ""), "/task/86c1abcd");
+}
+
+#[test]
+fn workspaces_keep_their_ids_and_names() {
+    let v = json!({ "teams": [
+        { "id": "901", "name": "Chip1" },
+        { "id": "902", "name": "Other" },
+        { "no": "id" }
+    ]});
+    assert_eq!(
+        parse_teams(&v),
+        [
+            ("901".to_string(), "Chip1".to_string()),
+            ("902".to_string(), "Other".to_string())
+        ]
+    );
+    assert!(parse_teams(&json!({})).is_empty());
 }

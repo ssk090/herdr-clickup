@@ -30,6 +30,23 @@ pub fn task_path(id: &str, team: &str, suffix: &str, extra: &str) -> String {
     path
 }
 
+/// The `(id, name)` of each workspace in a `GET /team` response.
+pub fn parse_teams(v: &Value) -> Vec<(String, String)> {
+    v.get("teams")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|t| {
+                    Some((
+                        t.get("id")?.as_str()?.to_string(),
+                        t.get("name")?.as_str()?.to_string(),
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// The `statuses` array of a list response, in order.
 pub fn parse_statuses(v: &Value) -> Vec<String> {
     v.get("statuses")
@@ -157,12 +174,16 @@ impl ClickUp {
         if let Some(t) = &self.team_id {
             return Ok(t.clone());
         }
-        let teams = self.get("/team")?;
-        teams
-            .pointer("/teams/0/id")
-            .and_then(Value::as_str)
-            .map(str::to_string)
+        self.teams()?
+            .into_iter()
+            .next()
+            .map(|(id, _)| id)
             .ok_or_else(|| anyhow!("this token can see no ClickUp workspace"))
+    }
+
+    /// Every workspace this token can see.
+    pub fn teams(&self) -> Result<Vec<(String, String)>> {
+        Ok(parse_teams(&self.get("/team")?))
     }
 
     pub fn my_user_id(&self) -> Result<u64> {
