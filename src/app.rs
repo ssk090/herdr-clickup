@@ -22,7 +22,8 @@ pub const NO_REPO: &str =
 
 pub fn client() -> Result<(Config, ClickUp)> {
     let cfg = Config::load()?;
-    let cu = ClickUp::new(cfg.token.clone(), cfg.team_id.clone());
+    let team = store::last("team").or_else(|| cfg.team_id.clone());
+    let cu = ClickUp::new(cfg.token.clone(), team);
     Ok((cfg, cu))
 }
 

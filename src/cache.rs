@@ -54,6 +54,11 @@ fn file_name(key: &str) -> String {
     format!("tasks-{safe}.json")
 }
 
+/// Removes the cached hierarchy and tasks after a workspace switch.
+pub fn clear(dir: &Path) {
+    let _ = fs::remove_dir_all(cache_dir(dir));
+}
+
 /// Best effort: a read-only or full state dir must not break the board.
 fn write<T: Serialize + ?Sized>(path: &Path, data: &T) {
     if let Some(parent) = path.parent() {

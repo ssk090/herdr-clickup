@@ -5,7 +5,7 @@ A [herdr](https://herdr.dev) plugin for ClickUp:
 - **Board** (`prefix+u`): a tab with your current sprints and every space → folder → list on the left,
   and the selected list's tasks on the right.
   `↑↓`/`jk` move · `⏎` open (and load the comments) · `t` change status · `s` write spec · `i` implement a drafted spec · `c` code now ·
-  `C` show closed tasks in the current list (they show dimmed) ·
+  `C` show closed tasks in the current list (they show dimmed) · `W` switch ClickUp workspace ·
   `A` add a repo to a running task · `X` close a task (asks first) · `u` review a drafted update (✉) ·
   `o` open in browser · `/` filter · `m` only mine ·
   the PHASE column shows `spec…`, `spec ✓`, `code…` or `done` ·
@@ -26,6 +26,8 @@ A [herdr](https://herdr.dev) plugin for ClickUp:
   ticket and starts coding; a move to *in progress* is drafted for your approval.
 - **Add a repo** (`A`) to a running multi-repo task, and **close a task** (`X`) to remove every
   worktree and its folder. Close asks first and lists repos with uncommitted changes.
+- **Workspaces**: `W` lists the workspaces the token can see. The board remembers the choice, clears
+  the old cache and reloads. CLI starts use the remembered workspace too.
 - **Failed starts**: the plugin removes a half-made worktree and workspace when nothing changed. If
   the agent wrote changes before the failure, it keeps them and tells you to close the task with `X`.
 - **Reopen**: starting a task that already has a worktree or task folder opens it instead of failing.
@@ -71,7 +73,7 @@ EOF
 | Key | Default | |
 |---|---|---|
 | `CLICKUP_TOKEN` | (required) | Personal API token |
-| `CLICKUP_TEAM_ID` | first workspace | ClickUp workspace (team) id |
+| `CLICKUP_TEAM_ID` | first workspace | Default ClickUp workspace (team) id. `W` on the board remembers a choice that wins over this default. |
 | `CLICKUP_SPACE_IDS` | all spaces | Comma-separated space ids the board shows (the number after `/s/` in a space URL) |
 | `CLICKUP_AGENT` | claude | Agent offered first until you pick one |
 | `CLICKUP_STATUS_STARTED` | `in progress` | Status drafted when a code start begins; empty to skip |

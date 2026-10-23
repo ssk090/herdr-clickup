@@ -63,6 +63,8 @@ pub enum Msg {
     Closed(Result<String>),
     /// The ticket and the list's statuses for the detail view.
     Detail(String, Result<Box<Ticket>>, Result<Vec<String>>),
+    /// The workspaces this token can see.
+    Teams(Result<Vec<(String, String)>>),
 }
 
 /// What the board does on the outside after a key. Everything else is state.
@@ -111,6 +113,11 @@ pub enum Effect {
     },
     OpenUrl(String),
     LoadDetail(Task),
+    ChooseTeam,
+    SwitchTeam {
+        id: String,
+        name: String,
+    },
 }
 
 #[derive(Clone)]
@@ -172,6 +179,11 @@ pub enum Modal {
     Status {
         task: Task,
         choices: Vec<String>,
+        sel: usize,
+    },
+    /// Pick a ClickUp workspace.
+    Team {
+        choices: Vec<(String, String)>,
         sel: usize,
     },
 }
@@ -336,6 +348,21 @@ impl BoardState {
                 }
                 false
             }
+            Msg::Teams(Ok(teams)) => {
+                if teams.is_empty() {
+                    self.status = "this token can see no ClickUp workspace".into();
+                } else {
+                    self.modal = Modal::Team {
+                        choices: teams,
+                        sel: 0,
+                    };
+                }
+                false
+            }
+            Msg::Teams(Err(e)) => {
+                self.status = format!("could not load workspaces: {e:#}");
+                false
+            }
         }
     }
 
@@ -344,6 +371,29 @@ impl BoardState {
         if let [(_, name)] = self.spaces.as_slice() {
             self.expanded.insert(space_key(name));
         }
+    }
+
+    /// Clears the data of the old workspace, keeping the pane links.
+    pub fn switch_team(&mut self) {
+        self.spaces.clear();
+        self.lists.clear();
+        self.expanded.clear();
+        self.tasks.clear();
+        self.loading_tasks.clear();
+        self.loading_hierarchy = false;
+        self.me = None;
+        self.source = Source::Mine;
+        self.table = TableState::default();
+        self.side.select(Some(0));
+        self.focus = Focus::Side;
+        self.stale.clear();
+        self.show_closed = false;
+        self.tickets.clear();
+        self.statuses.clear();
+        self.filter.clear();
+        self.filtering = false;
+        self.who = Who::Anyone;
+        self.who_label.clear();
     }
 
     pub fn set_links(&mut self, panes: BTreeMap<String, Link>) {
@@ -719,6 +769,27 @@ impl BoardState {
                     Vec::new()
                 }
             },
+            Modal::Team { choices, mut sel } => match code {
+                KeyCode::Up | KeyCode::Char('k') => {
+                    sel = sel.saturating_sub(1);
+                    self.modal = Modal::Team { choices, sel };
+                    Vec::new()
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    sel = (sel + 1).min(choices.len().saturating_sub(1));
+                    self.modal = Modal::Team { choices, sel };
+                    Vec::new()
+                }
+                KeyCode::Enter => {
+                    let (id, name) = choices[sel].clone();
+                    vec![Effect::SwitchTeam { id, name }]
+                }
+                KeyCode::Esc | KeyCode::Char('q') => Vec::new(),
+                _ => {
+                    self.modal = Modal::Team { choices, sel };
+                    Vec::new()
+                }
+            },
             Modal::Status {
                 task,
                 choices,
@@ -759,6 +830,7 @@ impl BoardState {
                 self.quit = true;
                 Vec::new()
             }
+            KeyCode::Char('W') => vec![Effect::ChooseTeam],
             // Esc is too easy to hit to close the whole board; it only clears the filter.
             KeyCode::Esc => {
                 self.filter.clear();
@@ -1522,6 +1594,42 @@ mod closed_tests {
         assert!(s.show_closed);
         s.tasks.insert("mine#closed".into(), vec![]);
         assert!(s.on_key(KeyCode::Char('C')).is_empty());
+        assert!(!s.show_closed);
+    }
+}
+
+#[cfg(test)]
+mod workspace_tests {
+    use super::*;
+
+    #[test]
+    fn the_team_picker_switches_to_the_chosen_workspace() {
+        let mut s = BoardState::new();
+        assert_eq!(s.on_key(KeyCode::Char('W')), vec![Effect::ChooseTeam]);
+        s.receive(Msg::Teams(Ok(vec![
+            ("1".into(), "One".into()),
+            ("2".into(), "Two".into()),
+        ])));
+        s.on_key(KeyCode::Down);
+        assert_eq!(
+            s.on_key(KeyCode::Enter),
+            vec![Effect::SwitchTeam {
+                id: "2".into(),
+                name: "Two".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn switching_teams_clears_the_old_data() {
+        let mut s = BoardState::new();
+        s.spaces = vec![("s".into(), "Space".into())];
+        s.lists = vec![];
+        s.tasks.insert("mine".into(), vec![]);
+        s.show_closed = true;
+        s.switch_team();
+        assert!(s.spaces.is_empty());
+        assert!(s.tasks.is_empty());
         assert!(!s.show_closed);
     }
 }
