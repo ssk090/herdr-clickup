@@ -23,6 +23,7 @@ fn task() -> Task {
             id: 7,
             username: "Deepti".into(),
         }],
+        list_id: Some("l1".into()),
     }
 }
 

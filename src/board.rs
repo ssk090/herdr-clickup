@@ -250,12 +250,27 @@ impl Board {
             Effect::PostUpdate { task, update } => self.post(task, update),
             Effect::DiscardUpdate(task) => self.discard(task),
             Effect::EditDraft { task, update } => self.edit_request = Some((task, update)),
+            Effect::LoadDetail(task) => self.load_detail(task),
             Effect::OpenUrl(url) => {
                 if let Err(e) = app::open_url(&url) {
                     self.state.status = format!("could not open the browser: {e:#}");
                 }
             }
         }
+    }
+
+    fn load_detail(&mut self, task: Task) {
+        let (cu, tx) = (self.cu.clone(), self.tx.clone());
+        let id = task.id.clone();
+        let list = task.list_id.clone();
+        thread::spawn(move || {
+            let ticket = cu.ticket(&id).map(Box::new);
+            let statuses = match list {
+                Some(list) => cu.list_statuses(&list),
+                None => Ok(Vec::new()),
+            };
+            let _ = tx.send(Msg::Detail(id, ticket, statuses));
+        });
     }
 
     fn choose_agent(&mut self, task: Task, mode: Mode) {
@@ -413,6 +428,9 @@ impl Board {
                 draw_choices(f, " Add which repo? ", &names, *sel)
             }
             Modal::Close { task, preview } => draw_close(f, task, preview),
+            Modal::Status { choices, sel, .. } => {
+                draw_choices(f, " Change status to ", choices, *sel)
+            }
         }
     }
 
@@ -559,11 +577,31 @@ impl Board {
             }
         }
         text.extend([Line::from(""), Line::from(t.description.trim().to_string())]);
+        text.push(Line::from(""));
+        match self.state.tickets.get(&t.id) {
+            Some(ticket) => {
+                text.push(Line::from(format!("Comments ({})", ticket.comments.len())).bold());
+                if ticket.comments.is_empty() {
+                    text.push(Line::from("No comments.").dim());
+                }
+                for c in &ticket.comments {
+                    text.push(
+                        Line::from(format!("{} · {}", c.user, crate::ticket::date(c.date_ms)))
+                            .dim(),
+                    );
+                    for line in c.text.lines() {
+                        text.push(Line::from(line.to_string()));
+                    }
+                    text.push(Line::from(""));
+                }
+            }
+            None => text.push(Line::from("Loading comments…").dim()),
+        }
         f.render_widget(Clear, area);
         let title = if self.state.can_implement() {
-            " Task · s spec  i implement  c code  A add repo  X close  o browser  esc "
+            " Task · t status  s spec  i implement  c code  A add repo  X close  o browser  esc "
         } else {
-            " Task · s spec  c code  A add repo  X close  o browser  esc "
+            " Task · t status  s spec  c code  A add repo  X close  o browser  esc "
         };
         let block = panel(title, true);
         f.render_widget(

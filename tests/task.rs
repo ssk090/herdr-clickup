@@ -11,6 +11,7 @@ fn sample() -> serde_json::Value {
         "description": "After login we land on /404.\nShould go to /home.",
         "status": { "status": "to do", "color": "#d3d3d3", "type": "open" },
         "url": "https://app.clickup.com/t/86c1abcd",
+        "list": { "id": "901", "name": "Sprint" },
         "assignees": [{ "id": 61481949, "username": "Shivananda Sai" }, { "id": 7, "username": null }]
     })
 }
@@ -35,6 +36,7 @@ fn parses_a_single_task() {
                     username: String::new()
                 },
             ],
+            list_id: Some("901".into()),
         })
     );
 }
@@ -69,6 +71,7 @@ fn task(id: &str, name: &str, description: &str) -> Task {
         url: format!("https://app.clickup.com/t/{id}"),
         description: description.into(),
         assignees: Vec::new(),
+        list_id: None,
     }
 }
 

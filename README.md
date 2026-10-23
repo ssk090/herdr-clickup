@@ -4,7 +4,7 @@ A [herdr](https://herdr.dev) plugin for ClickUp:
 
 - **Board** (`prefix+u`): a tab with your current sprints and every space → folder → list on the left,
   and the selected list's tasks on the right.
-  `↑↓`/`jk` move · `⏎` open/expand · `s` write spec · `i` implement a drafted spec · `c` code now ·
+  `↑↓`/`jk` move · `⏎` open (and load the comments) · `t` change status · `s` write spec · `i` implement a drafted spec · `c` code now ·
   `A` add a repo to a running task · `X` close a task (asks first) · `u` review a drafted update (✉) ·
   `o` open in browser · `/` filter · `m` only mine ·
   the PHASE column shows `spec…`, `spec ✓`, `code…` or `done` ·
@@ -35,6 +35,8 @@ A [herdr](https://herdr.dev) plugin for ClickUp:
   ("in progress", or the spec status), and a finish drafts a comment plus a status ("spec drafted" for a
   spec start; "implementation done" plus a move to *review* for a code start). **Nothing is posted
   automatically.** The drafted comment lists the branch's commits and changed files for code, or the
+  The detail view loads the task's comments. `t` lists the list's statuses, and the chosen status opens
+  a status-only draft that you approve.
   proposal's Why and task count for a spec. On the board the task gets a ✉; press `u` to read the exact
   comment and status, `e` to edit it in `$EDITOR` (the edit is saved), `⏎` to post it, `d` to discard
   it, `esc` to decide later. A status-only draft posts no comment.

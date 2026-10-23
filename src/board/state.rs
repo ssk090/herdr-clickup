@@ -4,6 +4,7 @@ use crate::{
     hierarchy::{ListRef, current_sprints},
     hook::{Link, Phase, Update},
     task::{Task, Who, assignees_in, filter_tasks},
+    ticket::Ticket,
 };
 use anyhow::Result;
 use ratatui::{
@@ -60,6 +61,8 @@ pub enum Msg {
     Added(Result<String>),
     /// A task was closed and its worktrees removed (or could not be).
     Closed(Result<String>),
+    /// The ticket and the list's statuses for the detail view.
+    Detail(String, Result<Box<Ticket>>, Result<Vec<String>>),
 }
 
 /// What the board does on the outside after a key. Everything else is state.
@@ -104,6 +107,7 @@ pub enum Effect {
         update: Update,
     },
     OpenUrl(String),
+    LoadDetail(Task),
 }
 
 #[derive(Clone)]
@@ -161,6 +165,12 @@ pub enum Modal {
         task: Task,
         preview: app::ClosePreview,
     },
+    /// Pick a status from the list's statuses.
+    Status {
+        task: Task,
+        choices: Vec<String>,
+        sel: usize,
+    },
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -192,6 +202,10 @@ pub struct BoardState {
     pub links: HashMap<String, (String, Link)>,
     /// Drafted ClickUp updates by task id, waiting for approval.
     pub pending: HashMap<String, Update>,
+    /// Tickets by task id, for the comments in the detail view.
+    pub tickets: HashMap<String, Ticket>,
+    /// The list's statuses by task id.
+    pub statuses: HashMap<String, Vec<String>>,
     /// Tasks being started, so a second `s` cannot start a second worktree.
     pub starting: HashSet<String>,
     /// Tasks whose apply workflow is being sent, so a second `i` cannot send it twice.
@@ -223,6 +237,8 @@ impl Default for BoardState {
             status: String::new(),
             links: HashMap::new(),
             pending: HashMap::new(),
+            tickets: HashMap::new(),
+            statuses: HashMap::new(),
             starting: HashSet::new(),
             implementing: HashSet::new(),
             stale: HashSet::new(),
@@ -298,6 +314,21 @@ impl BoardState {
                     Err(e) => format!("start failed: {e:#}"),
                 };
                 true
+            }
+            Msg::Detail(id, ticket, statuses) => {
+                match ticket {
+                    Ok(ticket) => {
+                        self.tickets.insert(id.clone(), *ticket);
+                    }
+                    Err(e) => self.status = format!("could not load comments: {e:#}"),
+                }
+                match statuses {
+                    Ok(statuses) => {
+                        self.statuses.insert(id, statuses);
+                    }
+                    Err(e) => self.status = format!("could not load statuses: {e:#}"),
+                }
+                false
             }
         }
     }
@@ -682,6 +713,37 @@ impl BoardState {
                     Vec::new()
                 }
             },
+            Modal::Status {
+                task,
+                choices,
+                mut sel,
+            } => match code {
+                KeyCode::Up | KeyCode::Char('k') => {
+                    sel = sel.saturating_sub(1);
+                    self.modal = Modal::Status { task, choices, sel };
+                    Vec::new()
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    sel = (sel + 1).min(choices.len().saturating_sub(1));
+                    self.modal = Modal::Status { task, choices, sel };
+                    Vec::new()
+                }
+                KeyCode::Enter => {
+                    self.open_update(
+                        task,
+                        Update {
+                            comment: String::new(),
+                            status: Some(choices[sel].clone()),
+                        },
+                    );
+                    Vec::new()
+                }
+                KeyCode::Esc | KeyCode::Char('q') => Vec::new(),
+                _ => {
+                    self.modal = Modal::Status { task, choices, sel };
+                    Vec::new()
+                }
+            },
         }
     }
 
@@ -803,8 +865,12 @@ impl BoardState {
             }
             KeyCode::Enter if n > 0 => {
                 self.modal = Modal::Detail;
-                Vec::new()
+                let Some(task) = self.selected_task() else {
+                    return Vec::new();
+                };
+                vec![Effect::LoadDetail(task)]
             }
+            KeyCode::Char('t') if n > 0 => self.status_effect(),
             KeyCode::Char('s') if n > 0 => self.choose_agent_effect(Mode::Spec),
             KeyCode::Char('i') if n > 0 => self.implement_effect(),
             KeyCode::Char('c') if n > 0 => self.choose_agent_effect(Mode::Code),
@@ -827,6 +893,7 @@ impl BoardState {
             KeyCode::Char('A') => self.add_repo_effect(),
             KeyCode::Char('X') => self.close_effect(),
             KeyCode::Char('o') => self.open_effect(),
+            KeyCode::Char('t') => self.status_effect(),
             KeyCode::Esc | KeyCode::Char('q') | KeyCode::Enter => Vec::new(),
             _ => {
                 self.modal = Modal::Detail;
@@ -906,6 +973,32 @@ impl BoardState {
             return Vec::new();
         };
         vec![Effect::PreviewClose(task)]
+    }
+
+    fn status_effect(&mut self) -> Vec<Effect> {
+        let Some(task) = self.selected_task() else {
+            return Vec::new();
+        };
+        match self.statuses.get(&task.id).cloned() {
+            Some(choices) if !choices.is_empty() => {
+                self.modal = Modal::Status {
+                    task,
+                    choices,
+                    sel: 0,
+                };
+                Vec::new()
+            }
+            Some(_) => {
+                self.status = "this list has no statuses".into();
+                self.modal = Modal::Detail;
+                Vec::new()
+            }
+            None => {
+                self.status = "loading the list's statuses…".into();
+                self.modal = Modal::Detail;
+                vec![Effect::LoadDetail(task)]
+            }
+        }
     }
 
     fn open_effect(&mut self) -> Vec<Effect> {
@@ -1028,7 +1121,11 @@ fn toggle(set: &mut HashSet<String>, key: String) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{hook::RepoWorktree, task::Assignee};
+    use crate::{
+        hook::RepoWorktree,
+        task::Assignee,
+        ticket::{Comment, Ticket},
+    };
 
     fn task(id: &str, name: &str) -> Task {
         Task {
@@ -1038,6 +1135,7 @@ mod tests {
             url: format!("https://app.clickup.com/t/{id}"),
             description: String::new(),
             assignees: vec![],
+            list_id: None,
         }
     }
 
@@ -1272,6 +1370,46 @@ mod tests {
             s.on_key(KeyCode::Char('X')),
             vec![Effect::PreviewClose(task("1", "one"))]
         );
+    }
+
+    #[test]
+    fn the_detail_loads_comments_and_a_status_change_makes_a_draft() {
+        let mut s = state_with(vec![task("1", "one")]);
+        assert_eq!(
+            s.on_key(KeyCode::Enter),
+            vec![Effect::LoadDetail(task("1", "one"))]
+        );
+        let ticket = Ticket {
+            task: task("1", "one"),
+            tags: Vec::new(),
+            parent: None,
+            custom_fields: Vec::new(),
+            checklists: Vec::new(),
+            subtasks: Vec::new(),
+            attachments: Vec::new(),
+            comments: vec![Comment {
+                user: "Deepti".into(),
+                date_ms: 0,
+                text: "Retry 3 times.".into(),
+            }],
+        };
+        s.receive(Msg::Detail(
+            "1".into(),
+            Ok(Box::new(ticket)),
+            Ok(vec!["to do".into(), "review".into()]),
+        ));
+        assert!(s.tickets.contains_key("1"));
+        assert!(s.on_key(KeyCode::Char('t')).is_empty());
+        assert!(matches!(s.modal, Modal::Status { .. }));
+        s.on_key(KeyCode::Down);
+        assert!(s.on_key(KeyCode::Enter).is_empty());
+        match &s.modal {
+            Modal::Update { update, .. } => {
+                assert!(update.comment.is_empty());
+                assert_eq!(update.status.as_deref(), Some("review"));
+            }
+            _ => panic!("expected a status draft"),
+        }
     }
 
     #[test]
