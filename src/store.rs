@@ -1,6 +1,6 @@
 use crate::hook::State;
 use anyhow::{Context, Result};
-use std::{env, fs, path::PathBuf};
+use std::{collections::HashSet, env, fs, path::PathBuf};
 
 fn dir() -> Result<PathBuf> {
     env::var_os("HERDR_PLUGIN_STATE_DIR")
@@ -23,6 +23,18 @@ pub fn update<T>(change: impl FnOnce(&mut State) -> T) -> Result<T> {
     fs::write(&tmp, serde_json::to_vec_pretty(&state)?)?;
     fs::rename(tmp, path)?;
     Ok(out)
+}
+
+/// Removes links whose pane is not live. Returns how many links it dropped.
+pub fn prune(live: &HashSet<String>) -> Result<usize> {
+    update(|state| prune_state(state, live))
+}
+
+/// The pure part of `prune`, for tests.
+pub fn prune_state(state: &mut State, live: &HashSet<String>) -> usize {
+    let before = state.panes.len();
+    state.panes.retain(|pane, _| live.contains(pane));
+    before - state.panes.len()
 }
 
 /// The current state without taking the lock (writes are atomic renames), for display.

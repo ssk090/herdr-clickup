@@ -115,6 +115,8 @@ times. The board loads at most four spaces at a time.
 The board caches the hierarchy and each task list in `$HERDR_PLUGIN_STATE_DIR/cache/`. It shows the
 cache at once, marked `(cached)`, and refreshes it in the background.
 
+On server startup and board open, the plugin drops links to panes that no longer exist.
+
 State (pane → task links: branch, phase, repos) lives in `$HERDR_PLUGIN_STATE_DIR/panes.json`.
 Multi-repo task folders live in `~/.herdr/tasks/`.
 
