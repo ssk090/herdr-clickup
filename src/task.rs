@@ -1,3 +1,4 @@
+use crate::json::{arr, text};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -22,13 +23,6 @@ pub struct Task {
 pub struct Assignee {
     pub id: u64,
     pub username: String,
-}
-
-fn text(v: &Value, key: &str) -> String {
-    v.get(key)
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string()
 }
 
 /// One task object, as returned by `GET /task/{id}` or inside a task list.
@@ -80,10 +74,7 @@ pub fn parse_task(v: &Value) -> Option<Task> {
 
 /// A `{ "tasks": [...] }` response, skipping entries that are not tasks.
 pub fn parse_task_list(v: &Value) -> Vec<Task> {
-    v.get("tasks")
-        .and_then(Value::as_array)
-        .map(|a| a.iter().filter_map(parse_task).collect())
-        .unwrap_or_default()
+    arr(v, "tasks").iter().filter_map(parse_task).collect()
 }
 
 const SLUG_MAX: usize = 40;

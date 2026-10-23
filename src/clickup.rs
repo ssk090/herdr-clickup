@@ -1,4 +1,5 @@
 use crate::hierarchy::{ListRef, parse_space_lists};
+use crate::json::{arr, flag, text, u64_at};
 use crate::task::{Task, parse_task, parse_task_list};
 use crate::ticket::{Ticket, parse_ticket};
 use anyhow::{Context, Result, anyhow};
@@ -32,31 +33,22 @@ pub fn task_path(id: &str, team: &str, suffix: &str, extra: &str) -> String {
 
 /// The `(id, name)` of each workspace in a `GET /team` response.
 pub fn parse_teams(v: &Value) -> Vec<(String, String)> {
-    v.get("teams")
-        .and_then(Value::as_array)
-        .map(|a| {
-            a.iter()
-                .filter_map(|t| {
-                    Some((
-                        t.get("id")?.as_str()?.to_string(),
-                        t.get("name")?.as_str()?.to_string(),
-                    ))
-                })
-                .collect()
+    arr(v, "teams")
+        .iter()
+        .filter_map(|t| {
+            let id = text(t, "id");
+            (!id.is_empty()).then(|| (id, text(t, "name")))
         })
-        .unwrap_or_default()
+        .collect()
 }
 
 /// The `statuses` array of a list response, in order.
 pub fn parse_statuses(v: &Value) -> Vec<String> {
-    v.get("statuses")
-        .and_then(Value::as_array)
-        .map(|a| {
-            a.iter()
-                .filter_map(|s| s.get("status").and_then(Value::as_str).map(str::to_string))
-                .collect()
-        })
-        .unwrap_or_default()
+    arr(v, "statuses")
+        .iter()
+        .map(|s| text(s, "status"))
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 const MAX_RETRIES: u32 = 4;
 const MAX_WAIT_SECS: u64 = 60;
@@ -187,9 +179,7 @@ impl ClickUp {
     }
 
     pub fn my_user_id(&self) -> Result<u64> {
-        self.get("/user")?
-            .pointer("/user/id")
-            .and_then(Value::as_u64)
+        u64_at(&self.get("/user")?, "/user/id")
             .ok_or_else(|| anyhow!("GET /user returned no user id"))
     }
 
@@ -200,8 +190,7 @@ impl ClickUp {
         for page in 0..MAX_PAGES {
             let v = self.get(&format!("{path}&page={page}"))?;
             let got = parse_task_list(&v);
-            let last =
-                got.is_empty() || v.get("last_page").and_then(Value::as_bool).unwrap_or(true);
+            let last = got.is_empty() || flag(&v, "last_page").unwrap_or(true);
             tasks.extend(got);
             if last {
                 break;
@@ -240,18 +229,11 @@ impl ClickUp {
     pub fn spaces(&self, only: &[String]) -> Result<Vec<(String, String)>> {
         let team = self.team_id()?;
         let v = self.get(&format!("/team/{team}/space?archived=false"))?;
-        let spaces = v
-            .get("spaces")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        Ok(spaces
+        Ok(arr(&v, "spaces")
             .iter()
             .filter_map(|s| {
-                Some((
-                    s.get("id")?.as_str()?.to_string(),
-                    s.get("name")?.as_str()?.to_string(),
-                ))
+                let id = text(s, "id");
+                (!id.is_empty()).then(|| (id, text(s, "name")))
             })
             .filter(|(id, _)| only.is_empty() || only.contains(id))
             .collect())

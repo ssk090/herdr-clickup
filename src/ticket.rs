@@ -1,4 +1,5 @@
 //! The whole ClickUp ticket an agent works from: the task plus checklists, subtasks, attachments and comments.
+use crate::json::{arr, text};
 use crate::task::{Task, parse_task};
 use serde_json::Value;
 
@@ -24,20 +25,6 @@ pub struct Comment {
     pub user: String,
     pub date_ms: i64,
     pub text: String,
-}
-
-fn text(v: &Value, key: &str) -> String {
-    v.get(key)
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string()
-}
-
-fn arr<'a>(v: &'a Value, key: &str) -> &'a [Value] {
-    v.get(key)
-        .and_then(Value::as_array)
-        .map(Vec::as_slice)
-        .unwrap_or_default()
 }
 
 /// One custom field as `(name, value)`. Values that are ClickUp ids (users, files, links) are skipped:
