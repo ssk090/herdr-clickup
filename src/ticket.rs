@@ -212,7 +212,7 @@ pub fn ticket_markdown(t: &Ticket) -> String {
 }
 
 /// `YYYY-MM-DD` (UTC) for unix ms, without a date library (Howard Hinnant's civil-from-days).
-fn date(ms: i64) -> String {
+pub fn date(ms: i64) -> String {
     let z = ms.div_euclid(86_400_000) + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z - era * 146_097;

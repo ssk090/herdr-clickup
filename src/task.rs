@@ -10,6 +10,8 @@ pub struct Task {
     pub url: String,
     pub description: String,
     pub assignees: Vec<Assignee>,
+    /// The list the task lives in, when ClickUp sends it.
+    pub list_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -61,6 +63,10 @@ pub fn parse_task(v: &Value) -> Option<Task> {
                     .collect()
             })
             .unwrap_or_default(),
+        list_id: v
+            .pointer("/list/id")
+            .and_then(Value::as_str)
+            .map(str::to_string),
     })
 }
 

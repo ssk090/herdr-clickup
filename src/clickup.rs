@@ -9,6 +9,18 @@ use std::{
 };
 
 const API: &str = "https://api.clickup.com/api/v2";
+
+/// The `statuses` array of a list response, in order.
+pub fn parse_statuses(v: &Value) -> Vec<String> {
+    v.get("statuses")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|s| s.get("status").and_then(Value::as_str).map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
 const MAX_RETRIES: u32 = 4;
 const MAX_WAIT_SECS: u64 = 60;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -199,6 +211,11 @@ impl ClickUp {
         let folders = self.get(&format!("/space/{space_id}/folder?archived=false"))?;
         let loose = self.get(&format!("/space/{space_id}/list?archived=false"))?;
         Ok(parse_space_lists(space_name, &folders, &loose))
+    }
+
+    /// The statuses a list allows, as ClickUp returns them.
+    pub fn list_statuses(&self, list_id: &str) -> Result<Vec<String>> {
+        Ok(parse_statuses(&self.get(&format!("/list/{list_id}"))?))
     }
 
     pub fn task(&self, id: &str) -> Result<Task> {
