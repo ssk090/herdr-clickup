@@ -1,5 +1,5 @@
 //! The whole ClickUp ticket an agent works from: the task plus checklists, subtasks, attachments and comments.
-use crate::task::{parse_task, Task};
+use crate::task::{Task, parse_task};
 use serde_json::Value;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -23,24 +23,39 @@ pub struct Comment {
 }
 
 fn text(v: &Value, key: &str) -> String {
-    v.get(key).and_then(Value::as_str).unwrap_or_default().to_string()
+    v.get(key)
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string()
 }
 
 fn arr<'a>(v: &'a Value, key: &str) -> &'a [Value] {
-    v.get(key).and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default()
+    v.get(key)
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or_default()
 }
 
 /// A task from `GET /task/{id}?include_subtasks=true` plus its `GET /task/{id}/comment` response.
 pub fn parse_ticket(task: &Value, comments: &Value) -> Option<Ticket> {
     Some(Ticket {
         task: parse_task(task)?,
-        tags: arr(task, "tags").iter().map(|t| text(t, "name")).filter(|n| !n.is_empty()).collect(),
+        tags: arr(task, "tags")
+            .iter()
+            .map(|t| text(t, "name"))
+            .filter(|n| !n.is_empty())
+            .collect(),
         checklists: arr(task, "checklists")
             .iter()
             .map(|c| {
                 let items = arr(c, "items")
                     .iter()
-                    .map(|i| (text(i, "name"), i.get("resolved").and_then(Value::as_bool).unwrap_or(false)))
+                    .map(|i| {
+                        (
+                            text(i, "name"),
+                            i.get("resolved").and_then(Value::as_bool).unwrap_or(false),
+                        )
+                    })
                     .collect();
                 (text(c, "name"), items)
             })
@@ -48,15 +63,25 @@ pub fn parse_ticket(task: &Value, comments: &Value) -> Option<Ticket> {
         subtasks: arr(task, "subtasks")
             .iter()
             .map(|s| {
-                let status = s.pointer("/status/status").and_then(Value::as_str).unwrap_or_default();
+                let status = s
+                    .pointer("/status/status")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
                 (text(s, "id"), text(s, "name"), status.to_string())
             })
             .collect(),
-        attachments: arr(task, "attachments").iter().map(|a| (text(a, "title"), text(a, "url"))).collect(),
+        attachments: arr(task, "attachments")
+            .iter()
+            .map(|a| (text(a, "title"), text(a, "url")))
+            .collect(),
         comments: arr(comments, "comments")
             .iter()
             .map(|c| Comment {
-                user: c.pointer("/user/username").and_then(Value::as_str).unwrap_or("someone").to_string(),
+                user: c
+                    .pointer("/user/username")
+                    .and_then(Value::as_str)
+                    .unwrap_or("someone")
+                    .to_string(),
                 date_ms: text(c, "date").parse().unwrap_or_default(),
                 text: text(c, "comment_text").trim().to_string(),
             })
@@ -72,7 +97,12 @@ pub fn ticket_markdown(t: &Ticket) -> String {
     if !task.status.is_empty() {
         md += &format!("- Status: {}\n", task.status);
     }
-    let who: Vec<&str> = task.assignees.iter().map(|a| a.username.as_str()).filter(|n| !n.is_empty()).collect();
+    let who: Vec<&str> = task
+        .assignees
+        .iter()
+        .map(|a| a.username.as_str())
+        .filter(|n| !n.is_empty())
+        .collect();
     if !who.is_empty() {
         md += &format!("- Assignees: {}\n", who.join(", "));
     }
@@ -104,8 +134,17 @@ pub fn ticket_markdown(t: &Ticket) -> String {
     if !t.comments.is_empty() {
         md += "\n## Comments\n";
         for c in &t.comments {
-            let quoted: Vec<String> = c.text.lines().map(|l| format!("> {l}").trim_end().to_string()).collect();
-            md += &format!("\n**{}** · {}\n\n{}\n", c.user, date(c.date_ms), quoted.join("\n"));
+            let quoted: Vec<String> = c
+                .text
+                .lines()
+                .map(|l| format!("> {l}").trim_end().to_string())
+                .collect();
+            md += &format!(
+                "\n**{}** · {}\n\n{}\n",
+                c.user,
+                date(c.date_ms),
+                quoted.join("\n")
+            );
         }
     }
     md
@@ -142,5 +181,20 @@ The full ticket is in {ticket_path}.
 
 /// The first prompt of a start that codes straight away: the task with the whole ticket inline.
 pub fn code_prompt(t: &Ticket) -> String {
-    format!("Work on ClickUp task {}. The full ticket:\n\n{}", t.task.id, ticket_markdown(t))
+    format!(
+        "Work on ClickUp task {}. The full ticket:\n\n{}",
+        t.task.id,
+        ticket_markdown(t)
+    )
+}
+
+/// The prompt that starts the implementation of an approved OpenSpec change.
+pub fn apply_prompt(change: &str) -> String {
+    format!(
+        "Implement the approved OpenSpec change `{change}`.
+
+1. Run `openspec instructions apply --change {change}` and follow those steps.
+2. Keep the change's tasks up to date as you complete them.
+3. Run the project's tests before you finish."
+    )
 }
