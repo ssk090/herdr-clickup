@@ -1,4 +1,7 @@
-use crate::json::{at, text};
+use crate::{
+    ids::{PaneId, TaskId, WorkspaceId},
+    json::{at, text},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -6,7 +9,7 @@ use std::collections::BTreeMap;
 /// A pane that `start` launched an agent in, and the ClickUp task it works on.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Link {
-    pub task_id: String,
+    pub task_id: TaskId,
     pub branch: String,
     /// The OpenSpec change of a spec-first start; `None` for a start that codes straight away.
     #[serde(default)]
@@ -180,7 +183,7 @@ fn with_summary(head: String, summary: &str) -> String {
 /// Plugin state: pane id → link. Persisted as JSON in the plugin state dir.
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct State {
-    pub panes: BTreeMap<String, Link>,
+    pub panes: BTreeMap<PaneId, Link>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -188,23 +191,23 @@ pub enum Decision {
     Nothing,
     /// The agent took the prompt: from now on idle/done means it finished.
     MarkWorking {
-        pane_id: String,
+        pane_id: PaneId,
     },
     /// The agent finished: tell ClickUp, then mark the link reported.
     Report {
-        pane_id: String,
-        task_id: String,
+        pane_id: PaneId,
+        task_id: TaskId,
         branch: String,
         change: Option<String>,
         phase: Phase,
     },
     /// The pane is gone: drop its link.
     Forget {
-        pane_id: String,
+        pane_id: PaneId,
     },
     /// The workspace's worktree was removed: drop every link to its panes.
     ForgetWorkspace {
-        workspace_id: String,
+        workspace_id: WorkspaceId,
     },
 }
 
@@ -221,6 +224,7 @@ pub fn decide(event: &Value, state: &State) -> Decision {
         let Some(ws) = at(event, "/data/workspace_id") else {
             return Decision::Nothing;
         };
+        let ws = WorkspaceId::from(ws);
         // Pane ids are `<workspace>:<pane>`.
         let linked = state
             .panes
@@ -235,6 +239,7 @@ pub fn decide(event: &Value, state: &State) -> Decision {
     let Some(pane_id) = at(event, "/data/pane_id") else {
         return Decision::Nothing;
     };
+    let pane_id = PaneId::from(pane_id);
     let Some(link) = state.panes.get(&pane_id) else {
         return Decision::Nothing;
     };

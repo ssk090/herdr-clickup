@@ -1,4 +1,5 @@
 use herdr_clickup::hook::{Link, State};
+use herdr_clickup::ids::PaneId;
 use herdr_clickup::store::prune_state;
 use std::collections::HashSet;
 
@@ -24,7 +25,7 @@ fn only_links_with_a_live_pane_stay() {
     let mut state = State::default();
     state.panes.insert("w1:p1".into(), link("1"));
     state.panes.insert("w1:p2".into(), link("2"));
-    let live: HashSet<String> = ["w1:p2".to_string()].into();
+    let live: HashSet<PaneId> = ["w1:p2"].map(PaneId::from).into();
     assert_eq!(prune_state(&mut state, &live), 1);
     assert!(state.panes.contains_key("w1:p2"));
     assert!(!state.panes.contains_key("w1:p1"));

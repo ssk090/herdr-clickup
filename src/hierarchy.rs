@@ -1,11 +1,14 @@
-use crate::json::{arr, num};
+use crate::{
+    ids::ListId,
+    json::{arr, num},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// A ClickUp list, where it lives, and its sprint dates when it is a sprint.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListRef {
-    pub id: String,
+    pub id: ListId,
     pub name: String,
     pub space: String,
     pub folder: Option<String>,
@@ -31,7 +34,7 @@ pub fn parse_space_lists(space: &str, folders: &Value, folderless: &Value) -> Ve
 
 fn list(space: &str, folder: Option<String>, l: &Value) -> Option<ListRef> {
     Some(ListRef {
-        id: l.get("id")?.as_str()?.to_string(),
+        id: ListId::from(l.get("id")?.as_str()?),
         name: l.get("name")?.as_str()?.to_string(),
         space: space.to_string(),
         folder,

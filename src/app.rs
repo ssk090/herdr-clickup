@@ -5,6 +5,7 @@ use crate::{
     config::Config,
     herdr,
     hook::{Link, Phase, RepoWorktree, Update, start_update},
+    ids::{PaneId, WorkspaceId},
     openspec, repos, store,
     task::{Task, agent_name, branch_name},
     taskspace,
@@ -51,8 +52,8 @@ pub enum Mode {
 /// setup is removed even when it left files. After the agent starts, a worktree with changes is kept
 /// so no work is lost.
 struct StartGuard {
-    workspace: Option<String>,
-    pane: Option<String>,
+    workspace: Option<WorkspaceId>,
+    pane: Option<PaneId>,
     dir: String,
     task_folder: bool,
     worktrees: Vec<RepoWorktree>,
@@ -313,7 +314,7 @@ fn reopen(
     // A link already points at the running task: focus it, and start the agent if it exited.
     let links = store::read().panes;
     if let Some((pane, link)) = links.iter().find(|(_, l)| l.task_id == task.id) {
-        let workspace = pane.split(':').next().unwrap_or_default().to_string();
+        let workspace = WorkspaceId::from(pane.split(':').next().unwrap_or_default());
         let _ = herdr::focus_workspace(&workspace);
         if herdr::agent_status(pane).is_err() {
             herdr::start_agent(&agent_name(task), agent, pane)?;
@@ -451,7 +452,7 @@ fn continuation(task: &Task, mode: Mode, change: Option<&str>, ticket: &Ticket) 
 
 /// Sends the apply workflow of an approved change to the agent in `pane_id`, adds the worktrees its
 /// `repos.txt` lists, and makes the next finish report the implementation rather than the spec.
-pub fn implement(pane_id: &str, change: &str) -> Result<String> {
+pub fn implement(pane_id: &PaneId, change: &str) -> Result<String> {
     let link = store::read()
         .panes
         .get(pane_id)
@@ -619,7 +620,7 @@ pub fn close_preview(task_id: &str) -> Result<ClosePreview> {
 /// Removes every worktree and the task folder of a task, and closes its workspace. Uncommitted work is
 /// discarded, which is why the board asks first and shows what is dirty.
 pub fn close_task(task_id: &str) -> Result<String> {
-    let panes: Vec<(String, Link)> = store::read()
+    let panes: Vec<(PaneId, Link)> = store::read()
         .panes
         .into_iter()
         .filter(|(_, l)| l.task_id == task_id)
@@ -628,7 +629,7 @@ pub fn close_task(task_id: &str) -> Result<String> {
         bail!("no open task {task_id}");
     }
     for (pane, link) in panes {
-        let workspace = pane.split(':').next().unwrap_or_default().to_string();
+        let workspace = WorkspaceId::from(pane.split(':').next().unwrap_or_default());
         if let Some(folder) = link.folder() {
             let failed = taskspace::remove_worktrees(&link.worktrees);
             if !failed.is_empty() {
@@ -652,7 +653,7 @@ pub fn close_task(task_id: &str) -> Result<String> {
     ))
 }
 
-fn find_link(task_id: &str) -> Result<(String, Link)> {
+fn find_link(task_id: &str) -> Result<(PaneId, Link)> {
     store::read()
         .panes
         .into_iter()

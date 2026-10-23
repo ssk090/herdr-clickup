@@ -1,4 +1,7 @@
-use crate::json::{at, text};
+use crate::{
+    ids::{PaneId, WorkspaceId},
+    json::{at, text},
+};
 use anyhow::{Context, Result, anyhow};
 use serde_json::Value;
 use std::{collections::HashSet, env, process::Command};
@@ -63,8 +66,8 @@ pub fn current_workspace() -> Option<String> {
 }
 
 pub struct Worktree {
-    pub workspace_id: String,
-    pub pane_id: String,
+    pub workspace_id: WorkspaceId,
+    pub pane_id: PaneId,
     /// The checkout's folder.
     pub path: String,
 }
@@ -76,16 +79,20 @@ pub fn create_worktree(repo: &str, branch: &str, label: &str) -> Result<Worktree
     ])?;
     let field = |p: &str| at(&r, p);
     Ok(Worktree {
-        workspace_id: field("/workspace/workspace_id")
-            .ok_or_else(|| anyhow!("worktree create: no workspace in {r}"))?,
-        pane_id: field("/root_pane/pane_id")
-            .ok_or_else(|| anyhow!("worktree create: no root pane in {r}"))?,
+        workspace_id: WorkspaceId::from(
+            field("/workspace/workspace_id")
+                .ok_or_else(|| anyhow!("worktree create: no workspace in {r}"))?,
+        ),
+        pane_id: PaneId::from(
+            field("/root_pane/pane_id")
+                .ok_or_else(|| anyhow!("worktree create: no root pane in {r}"))?,
+        ),
         path: field("/worktree/path").ok_or_else(|| anyhow!("worktree create: no path in {r}"))?,
     })
 }
 
 /// Opens a workspace on a folder, for a task whose worktrees live inside it.
-pub fn create_workspace(cwd: &str, label: &str) -> Result<(String, String)> {
+pub fn create_workspace(cwd: &str, label: &str) -> Result<(WorkspaceId, PaneId)> {
     let r = call(&[
         "workspace",
         "create",
@@ -97,40 +104,51 @@ pub fn create_workspace(cwd: &str, label: &str) -> Result<(String, String)> {
     ])?;
     let field = |p: &str| at(&r, p);
     Ok((
-        field("/workspace/workspace_id")
-            .ok_or_else(|| anyhow!("workspace create: no workspace in {r}"))?,
-        field("/root_pane/pane_id")
-            .ok_or_else(|| anyhow!("workspace create: no root pane in {r}"))?,
+        WorkspaceId::from(
+            field("/workspace/workspace_id")
+                .ok_or_else(|| anyhow!("workspace create: no workspace in {r}"))?,
+        ),
+        PaneId::from(
+            field("/root_pane/pane_id")
+                .ok_or_else(|| anyhow!("workspace create: no root pane in {r}"))?,
+        ),
     ))
 }
 
-pub fn close_workspace(workspace_id: &str) -> Result<()> {
-    call(&["workspace", "close", workspace_id]).map(drop)
+pub fn close_workspace(workspace_id: &WorkspaceId) -> Result<()> {
+    call(&["workspace", "close", workspace_id.as_str()]).map(drop)
 }
 
 /// Removes a single worktree workspace and its checkout.
-pub fn remove_worktree_workspace(workspace_id: &str) -> Result<()> {
-    call(&["worktree", "remove", "--workspace", workspace_id, "--force"]).map(drop)
+pub fn remove_worktree_workspace(workspace_id: &WorkspaceId) -> Result<()> {
+    call(&[
+        "worktree",
+        "remove",
+        "--workspace",
+        workspace_id.as_str(),
+        "--force",
+    ])
+    .map(drop)
 }
 
 /// The pane ids in a `pane list` result.
-pub fn parse_live_panes(v: &Value) -> HashSet<String> {
+pub fn parse_live_panes(v: &Value) -> HashSet<PaneId> {
     crate::json::arr(v, "panes")
         .iter()
         .filter_map(|p| {
             let id = text(p, "pane_id");
-            (!id.is_empty()).then_some(id)
+            (!id.is_empty()).then(|| PaneId::from(id))
         })
         .collect()
 }
 
 /// Every pane the running Herdr still has.
-pub fn live_panes() -> Result<HashSet<String>> {
+pub fn live_panes() -> Result<HashSet<PaneId>> {
     Ok(parse_live_panes(&call(&["pane", "list"])?))
 }
 
 /// Opens an existing worktree in a workspace.
-pub fn open_worktree(path: &str, label: &str) -> Result<(String, String)> {
+pub fn open_worktree(path: &str, label: &str) -> Result<(WorkspaceId, PaneId)> {
     let r = call(&[
         "worktree",
         "open",
@@ -142,18 +160,32 @@ pub fn open_worktree(path: &str, label: &str) -> Result<(String, String)> {
     ])?;
     let field = |p: &str| at(&r, p);
     Ok((
-        field("/workspace/workspace_id")
-            .ok_or_else(|| anyhow!("worktree open: no workspace in {r}"))?,
-        field("/root_pane/pane_id").ok_or_else(|| anyhow!("worktree open: no root pane in {r}"))?,
+        WorkspaceId::from(
+            field("/workspace/workspace_id")
+                .ok_or_else(|| anyhow!("worktree open: no workspace in {r}"))?,
+        ),
+        PaneId::from(
+            field("/root_pane/pane_id")
+                .ok_or_else(|| anyhow!("worktree open: no root pane in {r}"))?,
+        ),
     ))
 }
 
-pub fn focus_workspace(workspace_id: &str) -> Result<()> {
-    call(&["workspace", "focus", workspace_id]).map(drop)
+pub fn focus_workspace(workspace_id: &WorkspaceId) -> Result<()> {
+    call(&["workspace", "focus", workspace_id.as_str()]).map(drop)
 }
 
-pub fn start_agent(name: &str, kind: &str, pane: &str) -> Result<()> {
-    call(&["agent", "start", name, "--kind", kind, "--pane", pane]).map(drop)
+pub fn start_agent(name: &str, kind: &str, pane: &PaneId) -> Result<()> {
+    call(&[
+        "agent",
+        "start",
+        name,
+        "--kind",
+        kind,
+        "--pane",
+        pane.as_str(),
+    ])
+    .map(drop)
 }
 
 /// The agent state in one `agent get` result: `idle`, `working`, `blocked`, `done` or `unknown`.
@@ -162,17 +194,17 @@ pub fn parse_agent_status(v: &Value) -> Option<String> {
 }
 
 /// The live state of the agent in `pane`.
-pub fn agent_status(pane: &str) -> Result<String> {
-    let v = call(&["agent", "get", pane])?;
+pub fn agent_status(pane: &PaneId) -> Result<String> {
+    let v = call(&["agent", "get", pane.as_str()])?;
     parse_agent_status(&v).ok_or_else(|| anyhow!("agent get {pane}: no status in {v}"))
 }
 
 /// Waits until the agent in `pane` is ready for a prompt (idle), up to `timeout_ms`.
-pub fn wait_until_idle(pane: &str, timeout_ms: u64) -> Result<()> {
+pub fn wait_until_idle(pane: &PaneId, timeout_ms: u64) -> Result<()> {
     call(&[
         "agent",
         "wait",
-        pane,
+        pane.as_str(),
         "--until",
         "idle",
         "--timeout",
@@ -181,8 +213,8 @@ pub fn wait_until_idle(pane: &str, timeout_ms: u64) -> Result<()> {
     .map(drop)
 }
 
-pub fn prompt_agent(pane: &str, text: &str) -> Result<()> {
-    call(&["agent", "prompt", pane, text]).map(drop)
+pub fn prompt_agent(pane: &PaneId, text: &str) -> Result<()> {
+    call(&["agent", "prompt", pane.as_str(), text]).map(drop)
 }
 
 pub fn notify(title: &str, body: &str) {

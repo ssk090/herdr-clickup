@@ -1,4 +1,5 @@
 use herdr_clickup::herdr::{parse_agent_status, parse_live_panes, parse_output};
+use herdr_clickup::ids::PaneId;
 use serde_json::json;
 
 #[test]
@@ -78,7 +79,7 @@ fn reads_the_live_pane_ids() {
     ]});
     assert_eq!(
         parse_live_panes(&v),
-        ["w1:p1", "w1:p2"].map(String::from).into()
+        ["w1:p1", "w1:p2"].map(PaneId::from).into()
     );
     assert!(parse_live_panes(&json!({})).is_empty());
 }

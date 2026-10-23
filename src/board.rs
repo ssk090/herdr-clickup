@@ -9,6 +9,7 @@ use crate::{
     config::Config,
     herdr,
     hook::{Phase, Update},
+    ids::PaneId,
     store,
     task::Task,
     taskspace,
@@ -22,7 +23,9 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Cell, Clear, List, ListItem, ListState, Paragraph, Row, Table, Wrap},
 };
-use state::{BoardState, Effect, Focus, Modal, Msg, REFRESHING, RowKind, Source, task_key};
+use state::{
+    BoardState, Effect, Focus, Modal, Msg, REFRESHING, RowKind, Source, SourceKey, task_key,
+};
 use std::{
     fs,
     process::Command,
@@ -73,11 +76,11 @@ impl Board {
                 board.state.lists = h.lists;
                 board.state.me = h.me;
                 board.state.expand_single_space();
-                board.state.stale.insert("hierarchy".into());
+                board.state.stale_hierarchy = true;
             }
-            if let Some(tasks) = cache::read_tasks(&dir, "mine") {
-                board.state.tasks.insert("mine".into(), tasks);
-                board.state.stale.insert("mine".into());
+            if let Some(tasks) = cache::read_tasks(&dir, &SourceKey::Mine.cache_key()) {
+                board.state.tasks.insert(SourceKey::Mine, tasks);
+                board.state.stale.insert(SourceKey::Mine);
             }
         }
         board.load_hierarchy();
@@ -211,7 +214,7 @@ impl Board {
                         },
                     );
                 }
-                Msg::Tasks(key, Ok(tasks)) => cache::write_tasks(&dir, key, tasks),
+                Msg::Tasks(key, Ok(tasks)) => cache::write_tasks(&dir, &key.cache_key(), tasks),
                 _ => {}
             }
         }
@@ -359,8 +362,8 @@ impl Board {
         });
     }
 
-    fn implement(&mut self, task: Task, pane: &str, change: &str) {
-        let (tx, pane, change) = (self.tx.clone(), pane.to_string(), change.to_string());
+    fn implement(&mut self, task: Task, pane: &PaneId, change: &str) {
+        let (tx, pane, change) = (self.tx.clone(), pane.clone(), change.to_string());
         let id = task.id;
         thread::spawn(move || {
             let _ = tx.send(Msg::Implemented(id, app::implement(&pane, &change)));
@@ -477,7 +480,7 @@ impl Board {
             .collect();
         let title = if self.state.loading_hierarchy {
             " Sprints & Lists (loading…) "
-        } else if self.state.stale.contains("hierarchy") {
+        } else if self.state.stale_hierarchy {
             " Sprints & Lists (cached) "
         } else {
             " Sprints & Lists "
