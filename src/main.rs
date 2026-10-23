@@ -14,7 +14,7 @@ use herdr_clickup::{
 };
 use std::{env, io::BufRead};
 
-const USAGE: &str = "usage: herdr-clickup <board|tasks|link|picker|task|list|start [--code] <id> [agent] [repo[,repo]]|hook>";
+const USAGE: &str = "usage: herdr-clickup <board|tasks|link|picker|task|list|start [--code] <id> [agent] [repo[,repo]]|hook|reconcile>";
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
@@ -113,6 +113,7 @@ fn run(cmd: &str, rest: &[String]) -> Result<()> {
             Ok(())
         }
         "hook" => hook(),
+        "reconcile" => reconcile(),
         _ => bail!("{USAGE}"),
     }
 }
@@ -194,6 +195,17 @@ fn task_menu(cfg: &Config, cu: &ClickUp, task: &Task) -> Result<()> {
             "{m}"
         ))?
     );
+    Ok(())
+}
+
+/// Drops pane links whose pane no longer exists. Herdr runs this on server startup, and the board
+/// runs it on open, because Herdr does not replay missed close events.
+fn reconcile() -> Result<()> {
+    let live = herdr::live_panes()?;
+    let dropped = store::prune(&live)?;
+    if dropped > 0 {
+        println!("dropped {dropped} stale pane link(s)");
+    }
     Ok(())
 }
 

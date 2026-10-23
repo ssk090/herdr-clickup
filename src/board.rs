@@ -7,6 +7,7 @@ use crate::{
     cache,
     clickup::ClickUp,
     config::Config,
+    herdr,
     hook::{Phase, Update},
     store,
     task::Task,
@@ -42,6 +43,10 @@ struct Board {
 }
 
 pub fn run() -> Result<()> {
+    // Herdr does not replay close events, so drop links to panes that are already gone.
+    if let Ok(live) = herdr::live_panes() {
+        let _ = store::prune(&live);
+    }
     let (cfg, cu) = app::client()?;
     let mut terminal = ratatui::init();
     let result = Board::new(cfg, cu).run(&mut terminal);

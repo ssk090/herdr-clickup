@@ -11,6 +11,9 @@ platforms = ["macos", "linux"]
 [[build]]
 command = ["sh", "bin/build.sh"]
 
+[[startup]]
+command = ["sh", "bin/run.sh", "reconcile"]
+
 [[actions]]
 id = "board"
 title = "ClickUp: board (sprints & lists)"

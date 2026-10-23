@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, anyhow};
 use serde_json::Value;
-use std::{env, process::Command};
+use std::{collections::HashSet, env, process::Command};
 
 /// herdr's answer to one CLI call: the `result` on success, else a readable error. herdr reports
 /// request errors as `{"error":{"code","message"}}` on stdout, sometimes with exit status 0.
@@ -110,6 +110,23 @@ pub fn close_workspace(workspace_id: &str) -> Result<()> {
 /// Removes a single worktree workspace and its checkout.
 pub fn remove_worktree_workspace(workspace_id: &str) -> Result<()> {
     call(&["worktree", "remove", "--workspace", workspace_id, "--force"]).map(drop)
+}
+
+/// The pane ids in a `pane list` result.
+pub fn parse_live_panes(v: &Value) -> HashSet<String> {
+    v.get("panes")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|p| p.get("pane_id").and_then(Value::as_str).map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Every pane the running Herdr still has.
+pub fn live_panes() -> Result<HashSet<String>> {
+    Ok(parse_live_panes(&call(&["pane", "list"])?))
 }
 
 pub fn start_agent(name: &str, kind: &str, pane: &str) -> Result<()> {
