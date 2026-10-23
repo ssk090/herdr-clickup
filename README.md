@@ -12,7 +12,7 @@ A [herdr](https://herdr.dev) plugin for ClickUp:
 - **Write spec** (`s`, the default): asks which agent and which repo (repos open in your herdr
   workspaces; last picks first), creates a worktree on `CU-<id>-<slug>`, sets up
   [OpenSpec](https://openspec.dev) there if the repo has none, creates the change `cu-<id>-<slug>` with
-  the whole ticket (description, checklists, subtasks, attachments, comments) in its `clickup.md`, and
+  the whole ticket (description, checklists, subtasks, attachments, comments, custom fields, parent) in its `clickup.md`, and
   has the agent write the proposal, specs, design and tasks, with no code. Review it with
   [herdr-openspec](https://github.com/FlorisKr/herdr-openspec) (`prefix+t`), then press `i` to have the
   same agent implement it. Needs the `openspec` CLI.

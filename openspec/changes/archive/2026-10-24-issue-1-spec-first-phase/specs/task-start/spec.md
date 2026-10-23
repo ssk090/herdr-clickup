@@ -11,7 +11,7 @@ tasks only.
 - **AND** the first prompt forbids application code and asks for a validated change
 
 #### Scenario: The whole ticket is in the prompt
-- **WHEN** a task has checklists, subtasks, attachments or comments
+- **WHEN** a task has checklists, subtasks, attachments, comments, custom fields or a parent task
 - **THEN** the prompt or the seeded ticket file includes them
 
 ### Requirement: The board shows the task phase

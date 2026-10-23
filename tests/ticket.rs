@@ -15,6 +15,14 @@ fn task_json() -> serde_json::Value {
         "url": "https://app.clickup.com/t/86bb29hug",
         "assignees": [{ "id": 1, "username": "Shivananda Sai" }],
         "tags": [{ "name": "purchasing" }, { "name": "ui" }],
+        "parent": "86parent",
+        "custom_fields": [
+            { "id": "cf1", "name": "Email", "type": "short_text", "value": "ops@example.com", "type_config": {} },
+            { "id": "cf2", "name": "Priority", "type": "drop_down", "value": "p1", "type_config": { "options": [{ "id": "p1", "name": "High" }] } },
+            { "id": "cf3", "name": "Impacted users", "type": "labels", "value": ["u1", "u2"], "type_config": { "options": [{ "id": "u1", "name": "buyers" }, { "id": "u2", "name": "admins" }] } },
+            { "id": "cf4", "name": "Owner", "type": "users", "value": 7, "type_config": {} },
+            { "id": "cf5", "name": "Empty", "type": "short_text", "value": null, "type_config": {} }
+        ],
         "checklists": [{ "name": "Acceptance", "items": [
             { "name": "Button reduces ordered qty", "resolved": true },
             { "name": "Remaining balance is closed", "resolved": false }
@@ -35,6 +43,15 @@ fn parses_the_whole_ticket() {
     let t = parse_ticket(&task_json(), &comments_json()).unwrap();
     assert_eq!(t.task.id, "86bb29hug");
     assert_eq!(t.tags, ["purchasing", "ui"]);
+    assert_eq!(t.parent.as_deref(), Some("86parent"));
+    assert_eq!(
+        t.custom_fields,
+        [
+            ("Email".to_string(), "ops@example.com".to_string()),
+            ("Priority".to_string(), "High".to_string()),
+            ("Impacted users".to_string(), "buyers, admins".to_string())
+        ]
+    );
     assert_eq!(
         t.checklists,
         [(
@@ -75,6 +92,8 @@ fn a_bare_task_parses_with_empty_extras() {
     let t = parse_ticket(&json!({ "id": "x", "name": "task" }), &json!({})).unwrap();
     assert!(
         t.tags.is_empty()
+            && t.parent.is_none()
+            && t.custom_fields.is_empty()
             && t.checklists.is_empty()
             && t.subtasks.is_empty()
             && t.comments.is_empty()
@@ -93,6 +112,13 @@ fn renders_the_ticket_as_markdown() {
 - Status: ready for eng review
 - Assignees: Shivananda Sai
 - Tags: purchasing, ui
+- Parent task: 86parent
+
+## Custom fields
+
+- Email: ops@example.com
+- Priority: High
+- Impacted users: buyers, admins
 
 ## Description
 

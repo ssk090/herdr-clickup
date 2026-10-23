@@ -6,6 +6,10 @@ use serde_json::Value;
 pub struct Ticket {
     pub task: Task,
     pub tags: Vec<String>,
+    /// The parent task's id, when this task is a subtask.
+    pub parent: Option<String>,
+    /// `(field name, printable value)`, skipping fields whose value is an id or a file list.
+    pub custom_fields: Vec<(String, String)>,
     /// `(checklist name, [(item, resolved)])`
     pub checklists: Vec<(String, Vec<(String, bool)>)>,
     /// `(id, name, status)`
@@ -36,6 +40,41 @@ fn arr<'a>(v: &'a Value, key: &str) -> &'a [Value] {
         .unwrap_or_default()
 }
 
+/// One custom field as `(name, value)`. Values that are ClickUp ids (users, files, links) are skipped:
+/// they mean nothing to a reader and an agent cannot resolve them.
+fn custom_field(f: &Value) -> Option<(String, String)> {
+    let name = text(f, "name");
+    match text(f, "type").as_str() {
+        "users" | "attachment" | "files" | "relationship" => return None,
+        _ => {}
+    }
+    let options = f.pointer("/type_config/options").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
+    let option = |id: &str| {
+        options
+            .iter()
+            .find(|o| o.get("id").and_then(Value::as_str) == Some(id))
+            .and_then(|o| o.get("name"))
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .unwrap_or_else(|| id.to_string())
+    };
+    let value = match f.get("value")? {
+        Value::String(s) if s.is_empty() => return None,
+        Value::String(s) => option(s),
+        Value::Number(n) => n.to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Array(a) => {
+            let parts: Vec<String> = a.iter().filter_map(Value::as_str).map(option).collect();
+            if parts.is_empty() {
+                return None;
+            }
+            parts.join(", ")
+        }
+        _ => return None,
+    };
+    (!name.is_empty() && !value.is_empty()).then_some((name, value))
+}
+
 /// A task from `GET /task/{id}?include_subtasks=true` plus its `GET /task/{id}/comment` response.
 pub fn parse_ticket(task: &Value, comments: &Value) -> Option<Ticket> {
     Some(Ticket {
@@ -44,6 +83,15 @@ pub fn parse_ticket(task: &Value, comments: &Value) -> Option<Ticket> {
             .iter()
             .map(|t| text(t, "name"))
             .filter(|n| !n.is_empty())
+            .collect(),
+        parent: task
+            .get("parent")
+            .and_then(Value::as_str)
+            .filter(|p| !p.is_empty())
+            .map(str::to_string),
+        custom_fields: arr(task, "custom_fields")
+            .iter()
+            .filter_map(custom_field)
             .collect(),
         checklists: arr(task, "checklists")
             .iter()
@@ -108,6 +156,15 @@ pub fn ticket_markdown(t: &Ticket) -> String {
     }
     if !t.tags.is_empty() {
         md += &format!("- Tags: {}\n", t.tags.join(", "));
+    }
+    if let Some(parent) = &t.parent {
+        md += &format!("- Parent task: {parent}\n");
+    }
+    if !t.custom_fields.is_empty() {
+        md += "\n## Custom fields\n\n";
+        for (name, value) in &t.custom_fields {
+            md += &format!("- {name}: {value}\n");
+        }
     }
     match task.description.trim() {
         "" => md += "\n## Description\n\n_No description._\n",
