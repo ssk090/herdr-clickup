@@ -196,6 +196,8 @@ pub struct BoardState {
     pub starting: HashSet<String>,
     /// Tasks whose apply workflow is being sent, so a second `i` cannot send it twice.
     pub implementing: HashSet<String>,
+    /// Sources whose data came from the cache and is not refreshed yet.
+    pub stale: HashSet<String>,
     pub quit: bool,
 }
 
@@ -223,6 +225,7 @@ impl Default for BoardState {
             pending: HashMap::new(),
             starting: HashSet::new(),
             implementing: HashSet::new(),
+            stale: HashSet::new(),
             quit: false,
         }
     }
@@ -242,13 +245,11 @@ impl BoardState {
                     self.status =
                         format!("{failed} space(s) could not be loaded; press r to retry");
                 }
-                // With a single space there is nothing to choose: open it.
-                if let [(_, name)] = spaces.as_slice() {
-                    self.expanded.insert(space_key(name));
-                }
                 self.spaces = spaces;
                 self.lists = lists;
                 self.me = me;
+                self.expand_single_space();
+                self.stale.remove("hierarchy");
                 false
             }
             Msg::Hierarchy(Err(e)) => {
@@ -260,6 +261,7 @@ impl BoardState {
                 self.loading_tasks.remove(&key);
                 match result {
                     Ok(tasks) => {
+                        self.stale.remove(&key);
                         self.tasks.insert(key, tasks);
                         self.done_refreshing();
                     }
@@ -297,6 +299,13 @@ impl BoardState {
                 };
                 true
             }
+        }
+    }
+
+    /// With a single space there is nothing to choose: open it.
+    pub fn expand_single_space(&mut self) {
+        if let [(_, name)] = self.spaces.as_slice() {
+            self.expanded.insert(space_key(name));
         }
     }
 
@@ -1288,6 +1297,16 @@ mod tests {
             }
             _ => panic!("expected the who modal"),
         }
+    }
+
+    #[test]
+    fn a_refreshed_source_leaves_the_cached_mark() {
+        let mut s = BoardState::new();
+        s.stale.insert("hierarchy".into());
+        s.stale.insert("mine".into());
+        s.receive(Msg::Hierarchy(Ok((vec![], vec![], None, 0))));
+        s.receive(Msg::Tasks("mine".into(), Ok(vec![])));
+        assert!(s.stale.is_empty());
     }
 
     #[test]

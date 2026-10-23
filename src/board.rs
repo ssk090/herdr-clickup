@@ -4,6 +4,7 @@ mod state;
 
 use crate::{
     app::{self, Mode, NO_AGENT, NO_REPO},
+    cache,
     clickup::ClickUp,
     config::Config,
     hook::{Phase, Update},
@@ -60,6 +61,20 @@ impl Board {
             pending_read: Instant::now() - Duration::from_secs(60),
             edit_request: None,
         };
+        // Show the last data at once, then refresh it in the background.
+        if let Some(dir) = cache::state_dir() {
+            if let Some(h) = cache::read_hierarchy(&dir) {
+                board.state.spaces = h.spaces;
+                board.state.lists = h.lists;
+                board.state.me = h.me;
+                board.state.expand_single_space();
+                board.state.stale.insert("hierarchy".into());
+            }
+            if let Some(tasks) = cache::read_tasks(&dir, "mine") {
+                board.state.tasks.insert("mine".into(), tasks);
+                board.state.stale.insert("mine".into());
+            }
+        }
         board.load_hierarchy();
         board.load_tasks(Source::Mine);
         board
@@ -72,10 +87,7 @@ impl Board {
             }
             terminal.draw(|f| self.draw(f))?;
             while let Ok(msg) = self.rx.try_recv() {
-                let refresh = self.state.receive(msg);
-                if refresh {
-                    self.read_state();
-                }
+                self.receive(msg);
             }
             if event::poll(Duration::from_millis(100))?
                 && let Event::Key(k) = event::read()?
@@ -179,6 +191,29 @@ impl Board {
             };
             let _ = tx.send(Msg::Tasks(key, result));
         });
+    }
+
+    fn receive(&mut self, msg: Msg) {
+        if let Some(dir) = cache::state_dir() {
+            match &msg {
+                Msg::Hierarchy(Ok((spaces, lists, me, _))) => {
+                    cache::write_hierarchy(
+                        &dir,
+                        &cache::CachedHierarchy {
+                            spaces: spaces.clone(),
+                            lists: lists.clone(),
+                            me: *me,
+                        },
+                    );
+                }
+                Msg::Tasks(key, Ok(tasks)) => cache::write_tasks(&dir, key, tasks),
+                _ => {}
+            }
+        }
+        let refresh = self.state.receive(msg);
+        if refresh {
+            self.read_state();
+        }
     }
 
     fn read_state(&mut self) {
@@ -394,6 +429,8 @@ impl Board {
             .collect();
         let title = if self.state.loading_hierarchy {
             " Sprints & Lists (loading…) "
+        } else if self.state.stale.contains("hierarchy") {
+            " Sprints & Lists (cached) "
         } else {
             " Sprints & Lists "
         };
@@ -446,7 +483,13 @@ impl Board {
         if !self.state.filter.is_empty() {
             title.push_str(&format!(" · \"{}\"", self.state.filter));
         }
-        title.push_str(if loading { " (loading…) " } else { " " });
+        if loading {
+            title.push_str(" (loading…) ");
+        } else if self.state.stale.contains(&self.state.source.key()) {
+            title.push_str(" (cached) ");
+        } else {
+            title.push(' ');
+        }
         let widths = [
             Constraint::Length(16),
             Constraint::Length(7),

@@ -1,7 +1,8 @@
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// The slice of a ClickUp task the plugin uses.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Task {
     pub id: String,
     pub name: String,
@@ -11,7 +12,7 @@ pub struct Task {
     pub assignees: Vec<Assignee>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Assignee {
     pub id: u64,
     pub username: String,
