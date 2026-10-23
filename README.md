@@ -112,6 +112,15 @@ Building from source needs Rust 1.89 or later (edition 2024 and let-chains).
 State (pane → task links: branch, phase, repos) lives in `$HERDR_PLUGIN_STATE_DIR/panes.json`.
 Multi-repo task folders live in `~/.herdr/tasks/`.
 
+## Releases
+
+The version lives in `Cargo.toml` and `herdr-plugin.toml`, and a test fails when they differ. To
+release, bump both files, add the changes under `## [Unreleased]` in `CHANGELOG.md`, commit, then tag
+`vX.Y.Z` and push the tag. The release workflow publishes the binaries for macOS and Linux.
+
+Version policy: before 1.0, a feature bumps the minor version, a fix bumps the patch version, and a
+breaking change bumps the minor version. After 1.0, semantic versioning applies as usual.
+
 ## Specs
 
 This repo uses [OpenSpec](https://openspec.dev). Specs live in `openspec/specs`, and each change
