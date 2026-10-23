@@ -10,6 +10,26 @@ use std::{
 
 const API: &str = "https://api.clickup.com/api/v2";
 
+/// A ClickUp custom task id carries a prefix and a dash, for example `ABC-123`.
+pub fn is_custom_id(id: &str) -> bool {
+    id.contains('-')
+}
+
+/// The path for a task call. A custom id needs the team and the custom flag.
+pub fn task_path(id: &str, team: &str, suffix: &str, extra: &str) -> String {
+    let mut path = format!("/task/{id}{suffix}");
+    let mut sep = '?';
+    if is_custom_id(id) {
+        path.push_str(&format!("?custom_task_ids=true&team_id={team}"));
+        sep = '&';
+    }
+    if !extra.is_empty() {
+        path.push(sep);
+        path.push_str(extra);
+    }
+    path
+}
+
 /// The `statuses` array of a list response, in order.
 pub fn parse_statuses(v: &Value) -> Vec<String> {
     v.get("statuses")
@@ -218,25 +238,39 @@ impl ClickUp {
         Ok(parse_statuses(&self.get(&format!("/list/{list_id}"))?))
     }
 
+    fn task_call(&self, id: &str, suffix: &str, extra: &str) -> Result<String> {
+        let team = if is_custom_id(id) {
+            self.team_id()?
+        } else {
+            String::new()
+        };
+        Ok(task_path(id, &team, suffix, extra))
+    }
+
     pub fn task(&self, id: &str) -> Result<Task> {
-        parse_task(&self.get(&format!("/task/{id}"))?).ok_or_else(|| anyhow!("task {id} not found"))
+        let path = self.task_call(id, "", "")?;
+        parse_task(&self.get(&path)?).ok_or_else(|| anyhow!("task {id} not found"))
     }
 
     /// The task with its checklists, subtasks, attachments and comments.
     pub fn ticket(&self, id: &str) -> Result<Ticket> {
-        let task = self.get(&format!("/task/{id}?include_subtasks=true"))?;
-        let comments = self.get(&format!("/task/{id}/comment"))?;
+        let task = self.get(&self.task_call(id, "", "include_subtasks=true")?)?;
+        let comments = self.get(&self.task_call(id, "/comment", "")?)?;
         parse_ticket(&task, &comments).ok_or_else(|| anyhow!("task {id} not found"))
     }
 
     pub fn set_status(&self, id: &str, status: &str) -> Result<()> {
-        self.send("PUT", &format!("/task/{id}"), json!({ "status": status }))
+        self.send(
+            "PUT",
+            &self.task_call(id, "", "")?,
+            json!({ "status": status }),
+        )
     }
 
     pub fn comment(&self, id: &str, text: &str) -> Result<()> {
         self.send(
             "POST",
-            &format!("/task/{id}/comment"),
+            &self.task_call(id, "/comment", "")?,
             json!({ "comment_text": text, "notify_all": false }),
         )
     }

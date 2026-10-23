@@ -40,7 +40,9 @@ A [herdr](https://herdr.dev) plugin for ClickUp:
   proposal's Why and task count for a spec. On the board the task gets a ✉; press `u` to read the exact
   comment and status, `e` to edit it in `$EDITOR` (the edit is saved), `⏎` to post it, `d` to discard
   it, `esc` to decide later. A status-only draft posts no comment.
-- **Links**: Ctrl-click an `app.clickup.com/t/...` link in a terminal to open the task.
+- **Links**: Ctrl-click an `app.clickup.com/t/...` link in a terminal to open the task. Custom task
+  ids such as `ABC-123` work in a link and in `start`: the plugin sends `custom_task_ids=true` with
+  the team id.
 
 ## Install
 
