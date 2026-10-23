@@ -1,4 +1,4 @@
-use crate::hook::State;
+use crate::{hook::State, ids::PaneId};
 use anyhow::{Context, Result};
 use std::{collections::HashSet, env, fs, path::PathBuf};
 
@@ -26,12 +26,12 @@ pub fn update<T>(change: impl FnOnce(&mut State) -> T) -> Result<T> {
 }
 
 /// Removes links whose pane is not live. Returns how many links it dropped.
-pub fn prune(live: &HashSet<String>) -> Result<usize> {
+pub fn prune(live: &HashSet<PaneId>) -> Result<usize> {
     update(|state| prune_state(state, live))
 }
 
 /// The pure part of `prune`, for tests.
-pub fn prune_state(state: &mut State, live: &HashSet<String>) -> usize {
+pub fn prune_state(state: &mut State, live: &HashSet<PaneId>) -> usize {
     let before = state.panes.len();
     state.panes.retain(|pane, _| live.contains(pane));
     before - state.panes.len()

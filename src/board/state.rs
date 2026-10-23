@@ -3,6 +3,7 @@ use crate::{
     app::{self, Mode},
     hierarchy::{ListRef, current_sprints},
     hook::{Link, Phase, Update},
+    ids::{ListId, PaneId, TaskId},
     task::{Task, Who, assignees_in, filter_tasks},
     ticket::Ticket,
 };
@@ -26,13 +27,6 @@ pub enum Source {
 }
 
 impl Source {
-    pub fn key(&self) -> String {
-        match self {
-            Source::Mine => "mine".into(),
-            Source::List(l) => l.id.clone(),
-        }
-    }
-
     pub fn title(&self) -> String {
         match self {
             Source::Mine => "My tasks".into(),
@@ -44,25 +38,55 @@ impl Source {
     }
 }
 
+/// The typed key of a task source, with the closed flag. No source carries a magic string.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum SourceKey {
+    Mine,
+    List(ListId),
+    MineClosed,
+    ListClosed(ListId),
+}
+
+impl SourceKey {
+    pub fn of(source: &Source, closed: bool) -> Self {
+        match (source, closed) {
+            (Source::Mine, false) => SourceKey::Mine,
+            (Source::Mine, true) => SourceKey::MineClosed,
+            (Source::List(l), false) => SourceKey::List(l.id.clone()),
+            (Source::List(l), true) => SourceKey::ListClosed(l.id.clone()),
+        }
+    }
+
+    /// The key for the cache file: `mine`, a list id, or the same with `#closed`.
+    pub fn cache_key(&self) -> String {
+        match self {
+            SourceKey::Mine => "mine".into(),
+            SourceKey::MineClosed => "mine#closed".into(),
+            SourceKey::List(id) => id.to_string(),
+            SourceKey::ListClosed(id) => format!("{id}#closed"),
+        }
+    }
+}
+
 /// Spaces as `(id, name)`, all their lists, the token user's id, and how many spaces failed to load.
 pub type Hierarchy = (Vec<(String, String)>, Vec<ListRef>, Option<u64>, usize);
 
 pub enum Msg {
     Hierarchy(Result<Hierarchy>),
-    Tasks(String, Result<Vec<Task>>),
-    Started(String, Result<String>),
+    Tasks(SourceKey, Result<Vec<Task>>),
+    Started(TaskId, Result<String>),
     /// Something the user must do for a start that is still running.
     Progress(String),
     /// An approved update was posted (or failed).
     Posted(Result<String>),
     /// The apply workflow was sent to an agent (or could not be).
-    Implemented(String, Result<String>),
+    Implemented(TaskId, Result<String>),
     /// A repo was added to a running task (or could not be).
     Added(Result<String>),
     /// A task was closed and its worktrees removed (or could not be).
     Closed(Result<String>),
     /// The ticket and the list's statuses for the detail view.
-    Detail(String, Result<Box<Ticket>>, Result<Vec<String>>),
+    Detail(TaskId, Result<Box<Ticket>>, Result<Vec<String>>),
     /// The workspaces this token can see.
     Teams(Result<Vec<(String, String)>>),
 }
@@ -83,7 +107,7 @@ pub enum Effect {
     },
     Implement {
         task: Task,
-        pane: String,
+        pane: PaneId,
         change: String,
     },
     AddRepo {
@@ -202,8 +226,8 @@ pub struct BoardState {
     pub expanded: HashSet<String>,
     pub side: ListState,
     pub source: Source,
-    pub tasks: HashMap<String, Vec<Task>>,
-    pub loading_tasks: HashSet<String>,
+    pub tasks: HashMap<SourceKey, Vec<Task>>,
+    pub loading_tasks: HashSet<SourceKey>,
     pub table: TableState,
     pub focus: Focus,
     pub filter: String,
@@ -214,21 +238,23 @@ pub struct BoardState {
     pub modal: Modal,
     pub status: String,
     /// Pane→task links by task id, reread from the state file: phase, branch and pane.
-    pub links: HashMap<String, (String, Link)>,
+    pub links: HashMap<TaskId, (PaneId, Link)>,
     /// Drafted ClickUp updates by task id, waiting for approval.
-    pub pending: HashMap<String, Update>,
+    pub pending: HashMap<TaskId, Update>,
     /// Tickets by task id, for the comments in the detail view.
-    pub tickets: HashMap<String, Ticket>,
+    pub tickets: HashMap<TaskId, Ticket>,
     /// The list's statuses by task id.
-    pub statuses: HashMap<String, Vec<String>>,
+    pub statuses: HashMap<TaskId, Vec<String>>,
     /// The current source includes closed tasks.
     pub show_closed: bool,
     /// Tasks being started, so a second `s` cannot start a second worktree.
-    pub starting: HashSet<String>,
+    pub starting: HashSet<TaskId>,
     /// Tasks whose apply workflow is being sent, so a second `i` cannot send it twice.
-    pub implementing: HashSet<String>,
+    pub implementing: HashSet<TaskId>,
     /// Sources whose data came from the cache and is not refreshed yet.
-    pub stale: HashSet<String>,
+    pub stale: HashSet<SourceKey>,
+    /// The hierarchy came from the cache and is not refreshed yet.
+    pub stale_hierarchy: bool,
     pub quit: bool,
 }
 
@@ -260,6 +286,7 @@ impl Default for BoardState {
             starting: HashSet::new(),
             implementing: HashSet::new(),
             stale: HashSet::new(),
+            stale_hierarchy: false,
             quit: false,
         }
     }
@@ -283,7 +310,7 @@ impl BoardState {
                 self.lists = lists;
                 self.me = me;
                 self.expand_single_space();
-                self.stale.remove("hierarchy");
+                self.stale_hierarchy = false;
                 false
             }
             Msg::Hierarchy(Err(e)) => {
@@ -387,6 +414,7 @@ impl BoardState {
         self.side.select(Some(0));
         self.focus = Focus::Side;
         self.stale.clear();
+        self.stale_hierarchy = false;
         self.show_closed = false;
         self.tickets.clear();
         self.statuses.clear();
@@ -396,7 +424,7 @@ impl BoardState {
         self.who_label.clear();
     }
 
-    pub fn set_links(&mut self, panes: BTreeMap<String, Link>) {
+    pub fn set_links(&mut self, panes: BTreeMap<PaneId, Link>) {
         self.pending = panes
             .values()
             .filter_map(|l| Some((l.task_id.clone(), l.pending.clone()?)))
@@ -514,7 +542,7 @@ impl BoardState {
             .and_then(|i| self.visible_tasks().get(i).map(|t| (*t).clone()))
     }
 
-    pub fn phase_of(&self, task_id: &str) -> Option<Phase> {
+    pub fn phase_of(&self, task_id: &TaskId) -> Option<Phase> {
         self.links.get(task_id).map(|(_, l)| l.phase())
     }
 
@@ -1126,7 +1154,7 @@ impl BoardState {
     fn choose_who(&mut self) {
         let all = self
             .tasks
-            .get(&self.source.key())
+            .get(&task_key(&self.source, self.show_closed))
             .map(Vec::as_slice)
             .unwrap_or_default();
         let mut choices = vec![(format!("Everyone ({})", all.len()), Who::Anyone)];
@@ -1184,12 +1212,8 @@ fn picked_repos(choices: &[String], picked: &[bool]) -> Vec<String> {
 }
 
 /// The cache and task map key for a source, with or without closed tasks.
-pub fn task_key(source: &Source, closed: bool) -> String {
-    if closed {
-        format!("{}#closed", source.key())
-    } else {
-        source.key()
-    }
+pub fn task_key(source: &Source, closed: bool) -> SourceKey {
+    SourceKey::of(source, closed)
 }
 
 fn now_ms() -> i64 {
@@ -1248,7 +1272,7 @@ mod tests {
 
     fn state_with(tasks: Vec<Task>) -> BoardState {
         let mut s = BoardState::new();
-        s.tasks.insert("mine".into(), tasks);
+        s.tasks.insert(SourceKey::Mine, tasks);
         s.table.select(Some(0));
         s.focus = Focus::Tasks;
         s
@@ -1550,20 +1574,21 @@ mod tests {
     #[test]
     fn a_refreshed_source_leaves_the_cached_mark() {
         let mut s = BoardState::new();
-        s.stale.insert("hierarchy".into());
-        s.stale.insert("mine".into());
+        s.stale_hierarchy = true;
+        s.stale.insert(SourceKey::Mine);
         s.receive(Msg::Hierarchy(Ok((vec![], vec![], None, 0))));
-        s.receive(Msg::Tasks("mine".into(), Ok(vec![])));
+        s.receive(Msg::Tasks(SourceKey::Mine, Ok(vec![])));
         assert!(s.stale.is_empty());
+        assert!(!s.stale_hierarchy);
     }
 
     #[test]
     fn receiving_tasks_clears_loading_and_hierarchy_opens_a_single_space() {
         let mut s = BoardState::new();
-        s.loading_tasks.insert("mine".into());
-        s.receive(Msg::Tasks("mine".into(), Ok(vec![task("1", "one")])));
-        assert!(!s.loading_tasks.contains("mine"));
-        assert_eq!(s.tasks["mine"].len(), 1);
+        s.loading_tasks.insert(SourceKey::Mine);
+        s.receive(Msg::Tasks(SourceKey::Mine, Ok(vec![task("1", "one")])));
+        assert!(!s.loading_tasks.contains(&SourceKey::Mine));
+        assert_eq!(s.tasks[&SourceKey::Mine].len(), 1);
         s.receive(Msg::Hierarchy(Ok((
             vec![("s1".into(), "Space".into())],
             vec![],
@@ -1582,7 +1607,7 @@ mod closed_tests {
     #[test]
     fn closed_tasks_use_a_separate_key_and_load_when_missing() {
         let mut s = BoardState::new();
-        s.tasks.insert("mine".into(), Vec::new());
+        s.tasks.insert(SourceKey::Mine, Vec::new());
         assert!(!s.show_closed);
         assert_eq!(
             s.on_key(KeyCode::Char('C')),
@@ -1592,7 +1617,7 @@ mod closed_tests {
             }]
         );
         assert!(s.show_closed);
-        s.tasks.insert("mine#closed".into(), vec![]);
+        s.tasks.insert(SourceKey::MineClosed, vec![]);
         assert!(s.on_key(KeyCode::Char('C')).is_empty());
         assert!(!s.show_closed);
     }
@@ -1625,7 +1650,7 @@ mod workspace_tests {
         let mut s = BoardState::new();
         s.spaces = vec![("s".into(), "Space".into())];
         s.lists = vec![];
-        s.tasks.insert("mine".into(), vec![]);
+        s.tasks.insert(SourceKey::Mine, vec![]);
         s.show_closed = true;
         s.switch_team();
         assert!(s.spaces.is_empty());

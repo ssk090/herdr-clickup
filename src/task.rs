@@ -1,11 +1,14 @@
-use crate::json::{arr, text};
+use crate::{
+    ids::TaskId,
+    json::{arr, text},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// The slice of a ClickUp task the plugin uses.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Task {
-    pub id: String,
+    pub id: TaskId,
     pub name: String,
     pub status: String,
     pub url: String,
@@ -38,7 +41,7 @@ pub fn parse_task(v: &Value) -> Option<Task> {
         t => t,
     };
     Some(Task {
-        id,
+        id: TaskId::from(id),
         name,
         status: v
             .pointer("/status/status")
