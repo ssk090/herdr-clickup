@@ -70,9 +70,29 @@ CLICKUP_TOKEN=pk_...
 EOF
 ```
 
+To keep the token in a keychain, store it once and set the command instead:
+
+```sh
+# macOS
+security add-generic-password -a "$USER" -s herdr-clickup -w 'pk_...'
+# Linux (secret-tool prompts for the secret)
+secret-tool store --label='herdr-clickup' service herdr-clickup
+```
+
+Then put one of these in `.env`:
+
+```sh
+CLICKUP_TOKEN_CMD=security find-generic-password -s herdr-clickup -w
+CLICKUP_TOKEN_CMD=secret-tool lookup service herdr-clickup
+```
+
+`CLICKUP_TOKEN_CMD` wins over `CLICKUP_TOKEN`. The command runs through `sh -c`.
+
+
 | Key | Default | |
 |---|---|---|
 | `CLICKUP_TOKEN` | (required) | Personal API token |
+| `CLICKUP_TOKEN_CMD` | (none) | Shell command that prints the token. It wins over `CLICKUP_TOKEN`. |
 | `CLICKUP_TEAM_ID` | first workspace | Default ClickUp workspace (team) id. `W` on the board remembers a choice that wins over this default. |
 | `CLICKUP_SPACE_IDS` | all spaces | Comma-separated space ids the board shows (the number after `/s/` in a space URL) |
 | `CLICKUP_AGENT` | claude | Agent offered first until you pick one |

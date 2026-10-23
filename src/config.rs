@@ -1,5 +1,28 @@
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow, bail};
 use std::{collections::HashMap, env, fs, path::PathBuf};
+
+/// Runs a token command through `sh -c` and returns its trimmed stdout.
+pub fn token_from_command(cmd: &str) -> Result<String> {
+    let out = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(cmd)
+        .output()
+        .map_err(|e| anyhow!("CLICKUP_TOKEN_CMD: {e}"))?;
+    let token = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if !out.status.success() {
+        let err = String::from_utf8_lossy(&out.stderr);
+        let reason = if err.trim().is_empty() {
+            out.status.to_string()
+        } else {
+            err.trim().to_string()
+        };
+        bail!("CLICKUP_TOKEN_CMD failed: {reason}");
+    }
+    if token.is_empty() {
+        bail!("CLICKUP_TOKEN_CMD printed no token");
+    }
+    Ok(token)
+}
 
 /// Settings from `$HERDR_PLUGIN_CONFIG_DIR/.env`; real environment variables win.
 #[derive(Clone)]
@@ -41,11 +64,19 @@ impl Config {
                 .or_else(|| file.get(k).cloned())
                 .filter(|v| !v.is_empty())
         };
-        let Some(token) = get("CLICKUP_TOKEN") else {
-            let dir = config_dir()
-                .map(|d| d.display().to_string())
-                .unwrap_or("the plugin config dir".into());
-            bail!("CLICKUP_TOKEN is not set; add it to {dir}/.env");
+        let token = match get("CLICKUP_TOKEN_CMD") {
+            Some(cmd) => token_from_command(&cmd)?,
+            None => match get("CLICKUP_TOKEN") {
+                Some(token) => token,
+                None => {
+                    let dir = config_dir()
+                        .map(|d| d.display().to_string())
+                        .unwrap_or("the plugin config dir".into());
+                    bail!(
+                        "CLICKUP_TOKEN is not set; add it to {dir}/.env, or set CLICKUP_TOKEN_CMD"
+                    );
+                }
+            },
         };
         // An explicit empty value turns a status change off.
         let status =
