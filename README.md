@@ -107,6 +107,8 @@ herdr plugin link .        # after cargo build --release
 herdr plugin log list --plugin ssk090.clickup
 ```
 
+Building from source needs Rust 1.89 or later (edition 2024 and let-chains).
+
 State (pane → task links: branch, phase, repos) lives in `$HERDR_PLUGIN_STATE_DIR/panes.json`.
 Multi-repo task folders live in `~/.herdr/tasks/`.
 
