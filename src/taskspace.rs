@@ -111,6 +111,59 @@ pub fn add_worktrees(
     Ok(added)
 }
 
+/// The checkout of `branch` in `repo`, if the repo still has it.
+pub fn find_worktree(repo: &str, branch: &str) -> Option<String> {
+    let out = git_output(repo, &["worktree", "list", "--porcelain"]).ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    let want = format!("refs/heads/{branch}");
+    let mut current: Option<String> = None;
+    for line in text.lines() {
+        if let Some(path) = line.strip_prefix("worktree ") {
+            current = Some(path.to_string());
+        } else if line.strip_prefix("branch ") == Some(want.as_str()) {
+            return current;
+        }
+    }
+    None
+}
+
+/// The git worktrees inside a task folder, with each main checkout as its repo.
+pub fn worktrees_in(dir: &Path) -> Vec<RepoWorktree> {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(path_str) = path.to_str() else {
+            continue;
+        };
+        let Ok(list) = git_output(path_str, &["worktree", "list", "--porcelain"]) else {
+            continue;
+        };
+        if !list.status.success() {
+            continue;
+        }
+        let text = String::from_utf8_lossy(&list.stdout);
+        if let Some(repo) = text
+            .lines()
+            .find_map(|l| l.strip_prefix("worktree ").map(str::to_string))
+        {
+            out.push(RepoWorktree {
+                repo,
+                path: path.display().to_string(),
+            });
+        }
+    }
+    out
+}
+
 /// Removes the worktrees, even when they hold uncommitted changes. The caller asked first.
 pub fn remove_worktrees(worktrees: &[RepoWorktree]) -> Vec<String> {
     let mut failed = Vec::new();

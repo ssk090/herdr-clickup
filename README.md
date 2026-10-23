@@ -27,6 +27,8 @@ A [herdr](https://herdr.dev) plugin for ClickUp:
   worktree and its folder. Close asks first and lists repos with uncommitted changes.
 - **Failed starts**: the plugin removes a half-made worktree and workspace when nothing changed. If
   the agent wrote changes before the failure, it keeps them and tells you to close the task with `X`.
+- **Reopen**: starting a task that already has a worktree or task folder opens it instead of failing.
+  The agent starts again if it exited.
 - If the agent asks something at startup (e.g. "trust this folder?"), answer it in the new
   workspace; the plugin waits and then sends the task. It never answers for you.
 - **Every ClickUp write is a draft, only with your approval**: a start drafts its status change

@@ -8,7 +8,7 @@ use crate::{
     openspec, repos, store,
     task::{Task, agent_name, branch_name},
     taskspace,
-    ticket::{apply_prompt, code_prompt, spec_prompt, ticket_markdown},
+    ticket::{Ticket, apply_prompt, code_prompt, spec_prompt, ticket_markdown},
 };
 use anyhow::{Result, anyhow, bail};
 use std::{fs, path::Path, process::Command};
@@ -138,6 +138,9 @@ pub fn start(
     store::remember("repo", &repos[0]);
     let ticket = cu.ticket(&task.id)?;
     let branch = branch_name(task);
+    if let Some(summary) = reopen(task, agent, repos, mode, &ticket, &branch)? {
+        return Ok(summary);
+    }
     let multi = repos.len() > 1;
     let mut notes = Vec::new();
 
@@ -290,6 +293,159 @@ pub fn start(
     );
     guard.disarm();
     Ok(summary)
+}
+
+/// Opens the worktree or task folder a previous start left, instead of failing on an existing
+/// branch. Returns `None` when there is nothing to reopen.
+fn reopen(
+    task: &Task,
+    agent: &str,
+    repos: &[String],
+    mode: Mode,
+    ticket: &Ticket,
+    branch: &str,
+) -> Result<Option<String>> {
+    // Drop links to panes that died, so a stale link does not hide the existing worktree.
+    if let Ok(live) = herdr::live_panes() {
+        let _ = store::prune(&live);
+    }
+    // A link already points at the running task: focus it, and start the agent if it exited.
+    let links = store::read().panes;
+    if let Some((pane, link)) = links.iter().find(|(_, l)| l.task_id == task.id) {
+        let workspace = pane.split(':').next().unwrap_or_default().to_string();
+        let _ = herdr::focus_workspace(&workspace);
+        if herdr::agent_status(pane).is_err() {
+            herdr::start_agent(&agent_name(task), agent, pane)?;
+            herdr::prompt_agent(
+                pane,
+                &continuation(task, mode, link.change.as_deref(), ticket),
+            )?;
+            let pane = pane.clone();
+            store::update(|state| {
+                if let Some(l) = state.panes.get_mut(&pane) {
+                    l.working = false;
+                    l.reported = false;
+                }
+            })?;
+        }
+        return Ok(Some(format!(
+            "{agent} is already on {} in workspace {workspace}",
+            task.name
+        )));
+    }
+
+    // No link: look for the checkout the previous start left.
+    let (workspace, pane, dir, mut worktrees, host) = if repos.len() == 1
+        && let Some(path) = taskspace::find_worktree(&repos[0], branch)
+    {
+        let (workspace, pane) = herdr::open_worktree(&path, &task.name)?;
+        let worktree = RepoWorktree {
+            repo: repos[0].clone(),
+            path: path.clone(),
+        };
+        (workspace, pane, path.clone(), vec![worktree], path)
+    } else if repos.len() > 1 {
+        let dir = taskspace::task_dir(branch)?;
+        if !dir.is_dir() {
+            return Ok(None);
+        }
+        let worktrees = taskspace::worktrees_in(&dir);
+        if worktrees.is_empty() {
+            return Ok(None);
+        }
+        let dir_text = dir.display().to_string();
+        let (workspace, pane) = herdr::create_workspace(&dir_text, &task.name)?;
+        let host = worktrees[0].path.clone();
+        (workspace, pane, dir_text, worktrees, host)
+    } else {
+        return Ok(None);
+    };
+
+    let change = match mode {
+        Mode::Code => None,
+        Mode::Spec => {
+            let change = branch.to_lowercase();
+            let dirs = |w: &RepoWorktree| {
+                Path::new(&w.path)
+                    .join("openspec")
+                    .join("changes")
+                    .join(&change)
+                    .is_dir()
+            };
+            let host = worktrees
+                .iter()
+                .find(|w| dirs(w))
+                .map(|w| w.path.clone())
+                .unwrap_or(host);
+            let change_dir = Path::new(&host)
+                .join("openspec")
+                .join("changes")
+                .join(&change);
+            if !change_dir.is_dir() {
+                let _ = herdr::close_workspace(&workspace);
+                bail!(
+                    "{host} already exists but has no OpenSpec change `{change}`; open it in herdr or close the task"
+                );
+            }
+            // Implementation reads the change from the first worktree.
+            if let Some(i) = worktrees.iter().position(|w| w.path == host) {
+                let worktree = worktrees.remove(i);
+                worktrees.insert(0, worktree);
+            }
+            Some(change)
+        }
+    };
+    let prompt = continuation(task, mode, change.as_deref(), ticket);
+    let phase = match mode {
+        Mode::Spec => Phase::SpecDrafting,
+        Mode::Code => Phase::Implementing,
+    };
+    let link = Link {
+        task_id: task.id.clone(),
+        branch: branch.to_string(),
+        change: change.clone(),
+        phase: Some(phase),
+        dir: Some(dir.clone()),
+        worktrees: worktrees.clone(),
+        title: task.name.clone(),
+        url: task.url.clone(),
+        agent: agent.to_string(),
+        working: false,
+        reported: false,
+        pending: None,
+    };
+    store::update(|state| state.panes.insert(pane.clone(), link))?;
+    if let Err(e) = herdr::start_agent(&agent_name(task), agent, &pane) {
+        if !format!("{e:#}").contains("agent_not_ready") {
+            return Err(e);
+        }
+        herdr::wait_until_idle(&pane, READY_TIMEOUT_MS)?;
+    }
+    herdr::prompt_agent(&pane, &prompt)?;
+    let names: Vec<String> = worktrees
+        .iter()
+        .map(|w| taskspace::repo_name(&w.repo))
+        .collect();
+    let name = match names.as_slice() {
+        [one] => one.clone(),
+        many => format!("{} repos", many.len()),
+    };
+    herdr::notify(
+        "ClickUp task reopened",
+        &format!("{} in workspace {workspace}", task.name),
+    );
+    Ok(Some(format!("{agent} reopened {name} on {branch}")))
+}
+
+fn continuation(task: &Task, mode: Mode, change: Option<&str>, ticket: &Ticket) -> String {
+    match (mode, change) {
+        (_, Some(c)) => format!(
+            "Continue ClickUp task {id} ({name}) in the existing OpenSpec change `{c}`. The worktree and the ticket are already here. Run every `openspec` command from the repo that holds the change.",
+            id = task.id,
+            name = task.name
+        ),
+        _ => code_prompt(ticket),
+    }
 }
 
 /// Sends the apply workflow of an approved change to the agent in `pane_id`, adds the worktrees its
