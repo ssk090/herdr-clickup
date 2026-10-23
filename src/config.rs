@@ -1,6 +1,13 @@
 use anyhow::{Result, anyhow, bail};
 use std::{collections::HashMap, env, fs, path::PathBuf};
 
+/// The plugin's own value wins; the process environment is the fallback. An empty value counts as
+/// unset, except for a status setting where `Config::load` treats it as off.
+pub fn pick(file: Option<String>, env: Option<String>) -> Option<String> {
+    file.filter(|v| !v.is_empty())
+        .or(env.filter(|v| !v.is_empty()))
+}
+
 /// Runs a token command through `sh -c` and returns its trimmed stdout.
 pub fn token_from_command(cmd: &str) -> Result<String> {
     let out = std::process::Command::new("sh")
@@ -24,7 +31,7 @@ pub fn token_from_command(cmd: &str) -> Result<String> {
     Ok(token)
 }
 
-/// Settings from `$HERDR_PLUGIN_CONFIG_DIR/.env`; real environment variables win.
+/// Settings from `$HERDR_PLUGIN_CONFIG_DIR/.env`; the process environment is the fallback.
 #[derive(Clone)]
 pub struct Config {
     pub token: String,
@@ -58,29 +65,35 @@ fn read_env_file() -> HashMap<String, String> {
 impl Config {
     pub fn load() -> Result<Config> {
         let file = read_env_file();
-        let get = |k: &str| {
-            env::var(k)
-                .ok()
-                .or_else(|| file.get(k).cloned())
-                .filter(|v| !v.is_empty())
-        };
+        let get = |k: &str| pick(file.get(k).cloned(), env::var(k).ok());
         let token = match get("CLICKUP_TOKEN_CMD") {
             Some(cmd) => token_from_command(&cmd)?,
-            None => match get("CLICKUP_TOKEN") {
-                Some(token) => token,
-                None => {
-                    let dir = config_dir()
-                        .map(|d| d.display().to_string())
-                        .unwrap_or("the plugin config dir".into());
-                    bail!(
-                        "CLICKUP_TOKEN is not set; add it to {dir}/.env, or set CLICKUP_TOKEN_CMD"
+            None => {
+                let file_token = file.get("CLICKUP_TOKEN").cloned().filter(|v| !v.is_empty());
+                let env_token = env::var("CLICKUP_TOKEN").ok().filter(|v| !v.is_empty());
+                if let (Some(f), Some(e)) = (&file_token, &env_token)
+                    && f != e
+                {
+                    eprintln!(
+                        "herdr-clickup: CLICKUP_TOKEN in the environment differs from .env; using .env"
                     );
                 }
-            },
+                match pick(file_token, env_token) {
+                    Some(token) => token,
+                    None => {
+                        let dir = config_dir()
+                            .map(|d| d.display().to_string())
+                            .unwrap_or("the plugin config dir".into());
+                        bail!(
+                            "CLICKUP_TOKEN is not set; add it to {dir}/.env, or set CLICKUP_TOKEN_CMD"
+                        );
+                    }
+                }
+            }
         };
-        // An explicit empty value turns a status change off.
+        // An explicit empty value in .env turns a status change off.
         let status =
-            |k: &str, default: &str| match env::var(k).ok().or_else(|| file.get(k).cloned()) {
+            |k: &str, default: &str| match file.get(k).cloned().or_else(|| env::var(k).ok()) {
                 Some(v) if v.is_empty() => None,
                 Some(v) => Some(v),
                 None => Some(default.to_string()),
