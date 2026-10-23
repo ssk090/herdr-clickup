@@ -134,7 +134,8 @@ workspace's repository.
 ## Platforms
 
 macOS and Linux only. The plugin uses Unix file permissions and `sh` wrappers, so Windows is not
-supported. The manifest declares `platforms = ["macos", "linux"]`.
+supported. The manifest declares `platforms = ["macos", "linux"]`. CI runs the tests on Ubuntu; the
+manual Linux checklist is in [docs/linux.md](docs/linux.md).
 
 ## CLI
 
