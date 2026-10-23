@@ -24,6 +24,7 @@ fn task() -> Task {
             username: "Deepti".into(),
         }],
         list_id: Some("l1".into()),
+        closed: false,
     }
 }
 

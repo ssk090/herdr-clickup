@@ -37,6 +37,7 @@ fn parses_a_single_task() {
                 },
             ],
             list_id: Some("901".into()),
+            closed: false,
         })
     );
 }
@@ -72,6 +73,7 @@ fn task(id: &str, name: &str, description: &str) -> Task {
         description: description.into(),
         assignees: Vec::new(),
         list_id: None,
+        closed: false,
     }
 }
 
@@ -238,4 +240,15 @@ mod filter {
             ]
         );
     }
+}
+
+#[test]
+fn a_closed_status_is_flagged() {
+    let mut v = sample();
+    v["status"]["type"] = json!("closed");
+    assert!(parse_task(&v).unwrap().closed);
+    v["status"]["type"] = json!("done");
+    assert!(parse_task(&v).unwrap().closed);
+    v["status"]["type"] = json!("open");
+    assert!(!parse_task(&v).unwrap().closed);
 }

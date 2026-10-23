@@ -5,6 +5,7 @@ A [herdr](https://herdr.dev) plugin for ClickUp:
 - **Board** (`prefix+u`): a tab with your current sprints and every space → folder → list on the left,
   and the selected list's tasks on the right.
   `↑↓`/`jk` move · `⏎` open (and load the comments) · `t` change status · `s` write spec · `i` implement a drafted spec · `c` code now ·
+  `C` show closed tasks in the current list (they show dimmed) ·
   `A` add a repo to a running task · `X` close a task (asks first) · `u` review a drafted update (✉) ·
   `o` open in browser · `/` filter · `m` only mine ·
   the PHASE column shows `spec…`, `spec ✓`, `code…` or `done` ·

@@ -22,7 +22,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Cell, Clear, List, ListItem, ListState, Paragraph, Row, Table, Wrap},
 };
-use state::{BoardState, Effect, Focus, Modal, Msg, REFRESHING, RowKind, Source};
+use state::{BoardState, Effect, Focus, Modal, Msg, REFRESHING, RowKind, Source, task_key};
 use std::{
     fs,
     process::Command,
@@ -81,7 +81,7 @@ impl Board {
             }
         }
         board.load_hierarchy();
-        board.load_tasks(Source::Mine);
+        board.load_tasks(Source::Mine, false);
         board
     }
 
@@ -183,16 +183,16 @@ impl Board {
         });
     }
 
-    fn load_tasks(&mut self, source: Source) {
-        let key = source.key();
+    fn load_tasks(&mut self, source: Source, closed: bool) {
+        let key = task_key(&source, closed);
         if !self.state.loading_tasks.insert(key.clone()) {
             return;
         }
         let (cu, tx, spaces) = (self.cu.clone(), self.tx.clone(), self.cfg.space_ids.clone());
         thread::spawn(move || {
             let result = match &source {
-                Source::Mine => cu.my_tasks(&spaces),
-                Source::List(l) => cu.list_tasks(&l.id),
+                Source::Mine => cu.my_tasks(&spaces, closed),
+                Source::List(l) => cu.list_tasks(&l.id, closed),
             };
             let _ = tx.send(Msg::Tasks(key, result));
         });
@@ -228,10 +228,10 @@ impl Board {
 
     fn apply(&mut self, effect: Effect) {
         match effect {
-            Effect::LoadTasks(source) => self.load_tasks(source),
+            Effect::LoadTasks { source, closed } => self.load_tasks(source, closed),
             Effect::Refresh => {
                 self.state.status = REFRESHING.into();
-                self.load_tasks(self.state.source.clone());
+                self.load_tasks(self.state.source.clone(), self.state.show_closed);
                 self.load_hierarchy();
             }
             Effect::Start {
@@ -475,19 +475,33 @@ impl Board {
                     .map(|a| first_name(&a.username))
                     .collect();
                 let mine = me.is_some_and(|me| t.is_assigned_to(me));
+                let closed = t.closed;
+                let name = if self.state.pending.contains_key(&t.id) {
+                    format!("✉ {}", t.name)
+                } else {
+                    t.name.clone()
+                };
                 Row::new([
-                    Cell::from(t.status.clone()).fg(Color::Cyan),
+                    Cell::from(t.status.clone()).style(if closed {
+                        Style::new().dim()
+                    } else {
+                        Style::new().fg(Color::Cyan)
+                    }),
                     Cell::from(
                         self.state
                             .phase_of(&t.id)
                             .map(Phase::label)
                             .unwrap_or_default(),
                     )
-                    .fg(Color::Yellow),
-                    Cell::from(if self.state.pending.contains_key(&t.id) {
-                        format!("✉ {}", t.name)
+                    .style(if closed {
+                        Style::new().dim()
                     } else {
-                        t.name.clone()
+                        Style::new().fg(Color::Yellow)
+                    }),
+                    Cell::from(name).style(if closed {
+                        Style::new().dim()
+                    } else {
+                        Style::new()
                     }),
                     Cell::from(who.join(", ")).style(if mine {
                         Style::new().fg(Color::Green)
@@ -498,8 +512,12 @@ impl Board {
             })
             .collect();
         let count = tasks.len();
-        let loading = self.state.loading_tasks.contains(&self.state.source.key());
+        let key = task_key(&self.state.source, self.state.show_closed);
+        let loading = self.state.loading_tasks.contains(&key);
         let mut title = format!(" {} · {count}", self.state.source.title());
+        if self.state.show_closed {
+            title.push_str(" · closed");
+        }
         if !self.state.who_label.is_empty() {
             title.push_str(&format!(" · {}", self.state.who_label));
         }
@@ -508,7 +526,7 @@ impl Board {
         }
         if loading {
             title.push_str(" (loading…) ");
-        } else if self.state.stale.contains(&self.state.source.key()) {
+        } else if self.state.stale.contains(&key) {
             title.push_str(" (cached) ");
         } else {
             title.push(' ');
@@ -539,7 +557,7 @@ impl Board {
         } else if !self.state.status.is_empty() {
             Line::from(format!(" {}", self.state.status)).fg(Color::Yellow)
         } else {
-            let mut help = " ↑↓ move  ⏎ open  s spec  c code  A add repo  X close  u review ✉  o browser  / filter  m mine  a assignee  r refresh  q quit".to_string();
+            let mut help = " ↑↓ move  ⏎ open  s spec  c code  C closed  A add repo  X close  u review ✉  o browser  / filter  m mine  a assignee  r refresh  q quit".to_string();
             if self.state.can_implement() {
                 help.push_str("  i implement");
             }
