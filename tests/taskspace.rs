@@ -159,3 +159,31 @@ fn worktrees_are_created_detected_dirty_and_removed() {
         "a retry after a partial close is harmless"
     );
 }
+
+#[test]
+fn two_repos_with_the_same_name_get_distinct_folders() {
+    let root = temp("same-name");
+    let a = root.join("one").join("webui");
+    let b = root.join("two").join("webui");
+    repo(&a);
+    repo(&b);
+    let added = add_worktrees(
+        &root.join("task"),
+        &[a.display().to_string(), b.display().to_string()],
+        "CU-1-fix",
+        &[],
+    )
+    .unwrap();
+    let names: Vec<String> = added
+        .iter()
+        .map(|w| {
+            Path::new(&w.path)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string()
+        })
+        .collect();
+    assert_eq!(names, ["webui", "webui-2"]);
+    assert!(remove_worktrees(&added).is_empty());
+}

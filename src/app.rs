@@ -128,7 +128,7 @@ pub fn start(
                 ));
             }
             prompt.push_str(&format!(
-                "\n\nThe repos this task can touch are in {repos_rel}: one absolute path per line. Edit that list so it holds exactly the repos the change affects; implementation creates a worktree for each. Do not change code in any repo."
+                "\n\nThe repos this task can touch are in {repos_rel}: one absolute path per line. Edit that list so it holds exactly the repos the change affects; implementation creates a worktree for each. You may read the other repos listed there to judge impact, but do not change code in any repo."
             ));
             (prompt, Some(change))
         }

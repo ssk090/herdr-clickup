@@ -20,7 +20,11 @@ in herdr are the choices for a start.
   the list during review. Implementation reads it, adds the missing worktrees, then sends the apply
   workflow. No ClickUp write is involved.
 - **The first picked repo hosts the spec.** A spec start needs one worktree to hold the OpenSpec
-  change. The other repos are read-only until implementation adds their worktrees.
+  change. The other repos stay at their own paths. The prompt lets the agent read them to judge
+  impact, but not change them, and implementation adds their worktrees before any code work.
+- **OpenSpec runs in the host worktree.** The agent's cwd is the task folder, which is not an
+  OpenSpec project. Both the spec and apply prompts name the host repo and tell the agent to run
+  every `openspec` command there.
 - **Close asks once and forces.** The modal names the repos and the dirty ones. A second keypress
   removes the worktrees with `git worktree remove --force`, removes the task folder, and closes the
   workspace.
