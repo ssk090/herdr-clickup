@@ -143,16 +143,20 @@ impl Board {
         thread::spawn(move || {
             let result = (|| {
                 let spaces = cu.spaces(&only)?;
-                // One space's folders and lists per thread: a workspace can have dozens of spaces.
-                let results: Vec<Result<Vec<crate::hierarchy::ListRef>>> = thread::scope(|s| {
-                    let jobs: Vec<_> = spaces
-                        .iter()
-                        .map(|(id, name)| s.spawn(|| cu.space_lists(id, name)))
-                        .collect();
-                    jobs.into_iter()
-                        .map(|j| j.join().expect("space thread panicked"))
-                        .collect()
-                });
+                // At most four spaces at a time, so a burst does not hit the rate limit.
+                let mut results: Vec<Result<Vec<crate::hierarchy::ListRef>>> = Vec::new();
+                for chunk in spaces.chunks(4) {
+                    let part: Vec<Result<Vec<crate::hierarchy::ListRef>>> = thread::scope(|s| {
+                        let jobs: Vec<_> = chunk
+                            .iter()
+                            .map(|(id, name)| s.spawn(|| cu.space_lists(id, name)))
+                            .collect();
+                        jobs.into_iter()
+                            .map(|j| j.join().expect("space thread panicked"))
+                            .collect()
+                    });
+                    results.extend(part);
+                }
                 // One unreadable space should not hide the others.
                 let failed = results.iter().filter(|r| r.is_err()).count();
                 let lists = results.into_iter().flatten().flatten().collect();
