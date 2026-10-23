@@ -106,6 +106,11 @@ A sprint is any list with start and due dates; *Current sprints* shows those run
 Run it from a workspace inside the git repo the tasks belong to: the worktree is made from that
 workspace's repository.
 
+## Platforms
+
+macOS and Linux only. The plugin uses Unix file permissions and `sh` wrappers, so Windows is not
+supported. The manifest declares `platforms = ["macos", "linux"]`.
+
 ## CLI
 
 `bin/run.sh list` prints your tasks; `bin/run.sh start [--code] <task-id> [agent] [repo[,repo]]` starts one without the picker (spec first unless `--code`). The picker and the clicked-task pane ask for one or more repos.
