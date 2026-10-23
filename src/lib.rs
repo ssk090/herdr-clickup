@@ -1,6 +1,7 @@
 pub mod agents;
 pub mod app;
 pub mod board;
+pub mod cache;
 pub mod clickup;
 pub mod config;
 pub mod herdr;
