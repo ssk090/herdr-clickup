@@ -33,3 +33,15 @@ fn rejects_other_urls() {
     assert_eq!(task_id_from_url("https://example.com/t/86c1abcd"), None);
     assert_eq!(task_id_from_url("https://app.clickup.com/t/"), None);
 }
+
+#[test]
+fn custom_task_ids_work_in_both_url_forms() {
+    assert_eq!(
+        task_id_from_url("https://app.clickup.com/t/9012345/ABC-123").as_deref(),
+        Some("ABC-123")
+    );
+    assert_eq!(
+        task_id_from_url("https://app.clickup.com/t/ABC-123").as_deref(),
+        Some("ABC-123")
+    );
+}

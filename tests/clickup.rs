@@ -1,4 +1,4 @@
-use herdr_clickup::clickup::{parse_statuses, rate_limit_wait};
+use herdr_clickup::clickup::{is_custom_id, parse_statuses, rate_limit_wait, task_path};
 use serde_json::json;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -35,4 +35,19 @@ fn list_statuses_keep_their_order() {
     ]});
     assert_eq!(parse_statuses(&v), ["to do", "in progress"]);
     assert!(parse_statuses(&json!({})).is_empty());
+}
+
+#[test]
+fn a_custom_id_adds_the_team_and_the_flag() {
+    assert!(is_custom_id("ABC-123"));
+    assert!(!is_custom_id("86c1abcd"));
+    assert_eq!(
+        task_path("ABC-123", "901", "", "include_subtasks=true"),
+        "/task/ABC-123?custom_task_ids=true&team_id=901&include_subtasks=true"
+    );
+    assert_eq!(
+        task_path("ABC-123", "901", "/comment", ""),
+        "/task/ABC-123/comment?custom_task_ids=true&team_id=901"
+    );
+    assert_eq!(task_path("86c1abcd", "901", "", ""), "/task/86c1abcd");
 }
