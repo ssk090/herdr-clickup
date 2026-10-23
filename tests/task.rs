@@ -1,4 +1,4 @@
-use herdr_clickup::task::{parse_task, parse_task_list, Assignee, Task};
+use herdr_clickup::task::{Assignee, Task, parse_task, parse_task_list};
 use serde_json::json;
 
 fn sample() -> serde_json::Value {
@@ -26,8 +26,14 @@ fn parses_a_single_task() {
             url: "https://app.clickup.com/t/86c1abcd".into(),
             description: "After login we land on /404.\nShould go to /home.".into(),
             assignees: vec![
-                Assignee { id: 61481949, username: "Shivananda Sai".into() },
-                Assignee { id: 7, username: String::new() },
+                Assignee {
+                    id: 61481949,
+                    username: "Shivananda Sai".into()
+                },
+                Assignee {
+                    id: 7,
+                    username: String::new()
+                },
             ],
         })
     );
@@ -72,17 +78,27 @@ mod branch {
 
     #[test]
     fn prefixes_the_id_and_slugs_the_name() {
-        assert_eq!(branch_name(&task("86c1abcd", "Fix login redirect", "")), "CU-86c1abcd-fix-login-redirect");
+        assert_eq!(
+            branch_name(&task("86c1abcd", "Fix login redirect", "")),
+            "CU-86c1abcd-fix-login-redirect"
+        );
     }
 
     #[test]
     fn collapses_punctuation_and_trims_dashes() {
-        assert_eq!(branch_name(&task("abc", "  [API] Add /users endpoint!!  ", "")), "CU-abc-api-add-users-endpoint");
+        assert_eq!(
+            branch_name(&task("abc", "  [API] Add /users endpoint!!  ", "")),
+            "CU-abc-api-add-users-endpoint"
+        );
     }
 
     #[test]
     fn drops_non_ascii_and_caps_slug_at_40_on_a_word_boundary() {
-        let b = branch_name(&task("abc", "Überprüfung der sehr langen Aufgabe mit vielen Wörtern und noch mehr Text dazu", ""));
+        let b = branch_name(&task(
+            "abc",
+            "Überprüfung der sehr langen Aufgabe mit vielen Wörtern und noch mehr Text dazu",
+            "",
+        ));
         assert_eq!(b, "CU-abc-berpr-fung-der-sehr-langen-aufgabe-mit");
     }
 
@@ -106,7 +122,10 @@ mod prompt {
 
     #[test]
     fn omits_the_description_block_when_empty() {
-        assert_eq!(agent_prompt(&task("abc", "Fix login", "  ")), "Work on ClickUp task abc: Fix login\nhttps://app.clickup.com/t/abc");
+        assert_eq!(
+            agent_prompt(&task("abc", "Fix login", "  ")),
+            "Work on ClickUp task abc: Fix login\nhttps://app.clickup.com/t/abc"
+        );
     }
 }
 
@@ -117,7 +136,10 @@ mod agent {
     // herdr requires agent names to match [a-z][a-z0-9_-]{0,31}.
     #[test]
     fn is_a_lowercase_herdr_name() {
-        assert_eq!(agent_name(&task("86C1ABCD", "Fix login", "")), "cu-86c1abcd");
+        assert_eq!(
+            agent_name(&task("86C1ABCD", "Fix login", "")),
+            "cu-86c1abcd"
+        );
     }
 
     #[test]
@@ -129,13 +151,19 @@ mod agent {
 
 mod filter {
     use super::task;
-    use herdr_clickup::task::{assignees_in, filter_tasks, Assignee, Task, Who};
+    use herdr_clickup::task::{Assignee, Task, Who, assignees_in, filter_tasks};
 
     fn tasks() -> Vec<Task> {
         let mut a = task("86a", "Add VAT number to invoice", "");
-        a.assignees = vec![Assignee { id: 1, username: "me".into() }];
+        a.assignees = vec![Assignee {
+            id: 1,
+            username: "me".into(),
+        }];
         let mut b = task("86b", "Invoice grid: payment filter", "");
-        b.assignees = vec![Assignee { id: 2, username: "jd".into() }];
+        b.assignees = vec![Assignee {
+            id: 2,
+            username: "jd".into(),
+        }];
         let c = task("86c", "Fix login redirect", "");
         vec![a, b, c]
     }
@@ -146,13 +174,19 @@ mod filter {
 
     #[test]
     fn empty_query_keeps_everything() {
-        assert_eq!(ids(filter_tasks(&tasks(), "  ", Who::Anyone)), ["86a", "86b", "86c"]);
+        assert_eq!(
+            ids(filter_tasks(&tasks(), "  ", Who::Anyone)),
+            ["86a", "86b", "86c"]
+        );
     }
 
     #[test]
     fn every_word_must_match_name_or_id_case_insensitively() {
         let t = tasks();
-        assert_eq!(ids(filter_tasks(&t, "INVOICE", Who::Anyone)), ["86a", "86b"]);
+        assert_eq!(
+            ids(filter_tasks(&t, "INVOICE", Who::Anyone)),
+            ["86a", "86b"]
+        );
         assert_eq!(ids(filter_tasks(&t, "invoice vat", Who::Anyone)), ["86a"]);
         assert_eq!(ids(filter_tasks(&t, "86c", Who::Anyone)), ["86c"]);
     }
@@ -162,7 +196,10 @@ mod filter {
         let t = tasks();
         assert_eq!(ids(filter_tasks(&t, "", Who::Person(1))), ["86a"]);
         assert_eq!(ids(filter_tasks(&t, "", Who::Person(2))), ["86b"]);
-        assert_eq!(ids(filter_tasks(&t, "login", Who::Person(1))), Vec::<&str>::new());
+        assert_eq!(
+            ids(filter_tasks(&t, "login", Who::Person(1))),
+            Vec::<&str>::new()
+        );
     }
 
     #[test]
@@ -174,9 +211,28 @@ mod filter {
     fn assignees_are_listed_once_with_counts_busiest_first_then_by_name() {
         let mut t = tasks();
         let mut d = task("86d", "Another", "");
-        d.assignees = vec![Assignee { id: 2, username: "jd".into() }, Assignee { id: 3, username: "Ak".into() }];
+        d.assignees = vec![
+            Assignee {
+                id: 2,
+                username: "jd".into(),
+            },
+            Assignee {
+                id: 3,
+                username: "Ak".into(),
+            },
+        ];
         t.push(d);
-        let got: Vec<(String, usize)> = assignees_in(&t).into_iter().map(|(a, n)| (a.username, n)).collect();
-        assert_eq!(got, [("jd".to_string(), 2), ("Ak".to_string(), 1), ("me".to_string(), 1)]);
+        let got: Vec<(String, usize)> = assignees_in(&t)
+            .into_iter()
+            .map(|(a, n)| (a.username, n))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                ("jd".to_string(), 2),
+                ("Ak".to_string(), 1),
+                ("me".to_string(), 1)
+            ]
+        );
     }
 }
