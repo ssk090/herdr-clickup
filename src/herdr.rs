@@ -129,6 +129,29 @@ pub fn live_panes() -> Result<HashSet<String>> {
     Ok(parse_live_panes(&call(&["pane", "list"])?))
 }
 
+/// Opens an existing worktree in a workspace.
+pub fn open_worktree(path: &str, label: &str) -> Result<(String, String)> {
+    let r = call(&[
+        "worktree",
+        "open",
+        "--path",
+        path,
+        "--label",
+        label,
+        "--no-focus",
+    ])?;
+    let field = |p: &str| r.pointer(p).and_then(Value::as_str).map(str::to_string);
+    Ok((
+        field("/workspace/workspace_id")
+            .ok_or_else(|| anyhow!("worktree open: no workspace in {r}"))?,
+        field("/root_pane/pane_id").ok_or_else(|| anyhow!("worktree open: no root pane in {r}"))?,
+    ))
+}
+
+pub fn focus_workspace(workspace_id: &str) -> Result<()> {
+    call(&["workspace", "focus", workspace_id]).map(drop)
+}
+
 pub fn start_agent(name: &str, kind: &str, pane: &str) -> Result<()> {
     call(&["agent", "start", name, "--kind", kind, "--pane", pane]).map(drop)
 }

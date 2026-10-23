@@ -1,7 +1,8 @@
 use herdr_clickup::hook::RepoWorktree;
 use herdr_clickup::taskspace::{
-    add_repo, add_worktrees, base_ref, dirty, dirty_dir, read_repos, remove_worktrees, repo_name,
-    same_repo, task_dir, unique_name, write_agents_md, write_repos,
+    add_repo, add_worktrees, base_ref, dirty, dirty_dir, find_worktree, read_repos,
+    remove_worktrees, repo_name, same_repo, task_dir, unique_name, worktrees_in, write_agents_md,
+    write_repos,
 };
 use std::{
     fs,
@@ -148,6 +149,20 @@ fn worktrees_are_created_detected_dirty_and_removed() {
         .unwrap();
     assert_eq!(String::from_utf8_lossy(&branch.stdout).trim(), "CU-1-fix");
     assert!(dirty(&added).is_empty());
+    let found = find_worktree(repo_a.to_str().unwrap(), "CU-1-fix").unwrap();
+    assert_eq!(
+        fs::canonicalize(found).unwrap(),
+        fs::canonicalize(&added[0].path).unwrap()
+    );
+    assert_eq!(find_worktree(repo_a.to_str().unwrap(), "CU-other"), None);
+    let in_dir = worktrees_in(&task);
+    assert_eq!(in_dir.len(), 2);
+    let main = fs::canonicalize(&repo_a).unwrap();
+    assert!(
+        in_dir
+            .iter()
+            .any(|w| fs::canonicalize(&w.repo).unwrap() == main)
+    );
     fs::write(Path::new(&added[0].path).join("new.txt"), "x").unwrap();
     assert_eq!(dirty(&added), [repo_a.display().to_string()]);
     let again = add_worktrees(&task, &[repo_a.display().to_string()], "CU-1-fix", &added).unwrap();
