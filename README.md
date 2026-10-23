@@ -25,6 +25,8 @@ A [herdr](https://herdr.dev) plugin for ClickUp:
   ticket and starts coding; a move to *in progress* is drafted for your approval.
 - **Add a repo** (`A`) to a running multi-repo task, and **close a task** (`X`) to remove every
   worktree and its folder. Close asks first and lists repos with uncommitted changes.
+- **Failed starts**: the plugin removes a half-made worktree and workspace when nothing changed. If
+  the agent wrote changes before the failure, it keeps them and tells you to close the task with `X`.
 - If the agent asks something at startup (e.g. "trust this folder?"), answer it in the new
   workspace; the plugin waits and then sends the task. It never answers for you.
 - **Every ClickUp write is a draft, only with your approval**: a start drafts its status change

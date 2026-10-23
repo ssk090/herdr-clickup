@@ -46,6 +46,70 @@ pub enum Mode {
     Code,
 }
 
+/// Rolls back a start that fails after it creates files. Before the agent starts, the plugin's own
+/// setup is removed even when it left files. After the agent starts, a worktree with changes is kept
+/// so no work is lost.
+struct StartGuard {
+    workspace: Option<String>,
+    pane: Option<String>,
+    dir: String,
+    task_folder: bool,
+    worktrees: Vec<RepoWorktree>,
+    agent_started: bool,
+    armed: bool,
+}
+
+impl StartGuard {
+    fn new(dir: String, task_folder: bool) -> Self {
+        StartGuard {
+            workspace: None,
+            pane: None,
+            dir,
+            task_folder,
+            worktrees: Vec::new(),
+            agent_started: false,
+            armed: true,
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for StartGuard {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let clean = taskspace::dirty(&self.worktrees).is_empty();
+        let remove = !self.agent_started || clean;
+        if remove && taskspace::remove_worktrees(&self.worktrees).is_empty() {
+            if self.task_folder {
+                let _ = fs::remove_dir_all(&self.dir);
+            }
+            if let Some(ws) = &self.workspace {
+                let _ = herdr::close_workspace(ws);
+            }
+            if let Some(pane) = &self.pane {
+                let _ = store::update(|state| state.panes.remove(pane));
+            }
+            herdr::notify(
+                "ClickUp start failed",
+                "removed the half-made worktree and workspace",
+            );
+        } else {
+            herdr::notify(
+                "ClickUp start failed",
+                &format!(
+                    "kept the worktree at {} because it has changes; close it from the board with X",
+                    self.dir
+                ),
+            );
+        }
+    }
+}
+
 /// Starts `agent` on `task` in a worktree of every repo in `repos` on `CU-<id>-<slug>`, given the whole
 /// ticket: as an OpenSpec change to write (`Mode::Spec`) or as work to do (`Mode::Code`). One repo keeps
 /// today's single-worktree start; two or more share a task folder. Returns a one-line summary and prints
@@ -79,29 +143,46 @@ pub fn start(
 
     // One workspace and one agent. A multi-repo spec start creates only the host worktree now;
     // implementation adds the repos its approved repos.txt lists.
+    let mut guard;
     let (workspace_id, pane_id, dir, worktrees, host) = if multi {
         let dir = taskspace::task_dir(&branch)?;
+        let dir_text = dir.display().to_string();
+        guard = StartGuard::new(dir_text.clone(), true);
         let now = if mode == Mode::Spec {
             &repos[..1]
         } else {
             repos
         };
-        let worktrees = taskspace::add_worktrees(&dir, now, &branch, &[])?;
-        let dir_text = dir.display().to_string();
+        for repo in now {
+            let added = taskspace::add_worktrees(
+                &dir,
+                std::slice::from_ref(repo),
+                &branch,
+                &guard.worktrees,
+            )?;
+            guard.worktrees.extend(added);
+        }
         let (workspace_id, pane_id) = herdr::create_workspace(&dir_text, &task.name)?;
+        guard.workspace = Some(workspace_id.clone());
+        guard.pane = Some(pane_id.clone());
+        let worktrees = guard.worktrees.clone();
         let host = worktrees[0].path.clone();
         (workspace_id, pane_id, dir_text, worktrees, host)
     } else {
         let wt = herdr::create_worktree(&repos[0], &branch, &task.name)?;
-        let worktree = RepoWorktree {
+        guard = StartGuard::new(wt.path.clone(), false);
+        guard.workspace = Some(wt.workspace_id.clone());
+        guard.pane = Some(wt.pane_id.clone());
+        guard.worktrees.push(RepoWorktree {
             repo: repos[0].clone(),
             path: wt.path.clone(),
-        };
+        });
+        let worktrees = guard.worktrees.clone();
         (
             wt.workspace_id,
             wt.pane_id,
             wt.path.clone(),
-            vec![worktree],
+            worktrees,
             wt.path,
         )
     };
@@ -175,6 +256,7 @@ pub fn start(
         pending,
     };
     store::update(|state| state.panes.insert(pane_id.clone(), link))?;
+    guard.agent_started = true;
     if let Err(e) = herdr::start_agent(&agent_name(task), agent, &pane_id) {
         // Usually the agent asking whether to trust the new worktree folder: the user's call, not ours.
         if !format!("{e:#}").contains("agent_not_ready") {
@@ -206,6 +288,7 @@ pub fn start(
         "ClickUp task started",
         &format!("{} → {agent} in {}", task.name, workspace_id),
     );
+    guard.disarm();
     Ok(summary)
 }
 
