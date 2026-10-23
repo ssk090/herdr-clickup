@@ -11,7 +11,11 @@ pub struct Task {
     pub description: String,
     pub assignees: Vec<Assignee>,
     /// The list the task lives in, when ClickUp sends it.
+    #[serde(default)]
     pub list_id: Option<String>,
+    /// The task's status is a done or closed type.
+    #[serde(default)]
+    pub closed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -67,6 +71,10 @@ pub fn parse_task(v: &Value) -> Option<Task> {
             .pointer("/list/id")
             .and_then(Value::as_str)
             .map(str::to_string),
+        closed: v
+            .pointer("/status/type")
+            .and_then(Value::as_str)
+            .is_some_and(|t| t == "closed" || t == "done"),
     })
 }
 

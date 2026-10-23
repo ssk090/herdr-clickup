@@ -68,7 +68,10 @@ pub enum Msg {
 /// What the board does on the outside after a key. Everything else is state.
 #[derive(Debug, PartialEq)]
 pub enum Effect {
-    LoadTasks(Source),
+    LoadTasks {
+        source: Source,
+        closed: bool,
+    },
     Refresh,
     Start {
         task: Task,
@@ -206,6 +209,8 @@ pub struct BoardState {
     pub tickets: HashMap<String, Ticket>,
     /// The list's statuses by task id.
     pub statuses: HashMap<String, Vec<String>>,
+    /// The current source includes closed tasks.
+    pub show_closed: bool,
     /// Tasks being started, so a second `s` cannot start a second worktree.
     pub starting: HashSet<String>,
     /// Tasks whose apply workflow is being sent, so a second `i` cannot send it twice.
@@ -239,6 +244,7 @@ impl Default for BoardState {
             pending: HashMap::new(),
             tickets: HashMap::new(),
             statuses: HashMap::new(),
+            show_closed: false,
             starting: HashSet::new(),
             implementing: HashSet::new(),
             stale: HashSet::new(),
@@ -446,7 +452,7 @@ impl BoardState {
     pub fn visible_tasks(&self) -> Vec<&Task> {
         let all = self
             .tasks
-            .get(&self.source.key())
+            .get(&task_key(&self.source, self.show_closed))
             .map(Vec::as_slice)
             .unwrap_or_default();
         filter_tasks(all, &self.filter, self.who)
@@ -773,6 +779,19 @@ impl BoardState {
                 self.focus = Focus::Tasks;
                 Vec::new()
             }
+            KeyCode::Char('C') => {
+                self.show_closed = !self.show_closed;
+                self.table.select(Some(0));
+                let key = task_key(&self.source, self.show_closed);
+                if self.tasks.contains_key(&key) {
+                    Vec::new()
+                } else {
+                    vec![Effect::LoadTasks {
+                        source: self.source.clone(),
+                        closed: self.show_closed,
+                    }]
+                }
+            }
             KeyCode::Char('m') if self.me.is_none() => {
                 self.status =
                     "your ClickUp user is not loaded yet; try again in a moment (r reloads)".into();
@@ -904,8 +923,14 @@ impl BoardState {
 
     fn show(&mut self, source: Source) -> Vec<Effect> {
         let mut effects = Vec::new();
-        if !self.tasks.contains_key(&source.key()) {
-            effects.push(Effect::LoadTasks(source.clone()));
+        if !self
+            .tasks
+            .contains_key(&task_key(&source, self.show_closed))
+        {
+            effects.push(Effect::LoadTasks {
+                source: source.clone(),
+                closed: self.show_closed,
+            });
         }
         self.source = source;
         self.table.select(Some(0));
@@ -1086,6 +1111,15 @@ fn picked_repos(choices: &[String], picked: &[bool]) -> Vec<String> {
         .collect()
 }
 
+/// The cache and task map key for a source, with or without closed tasks.
+pub fn task_key(source: &Source, closed: bool) -> String {
+    if closed {
+        format!("{}#closed", source.key())
+    } else {
+        source.key()
+    }
+}
+
 fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1136,6 +1170,7 @@ mod tests {
             description: String::new(),
             assignees: vec![],
             list_id: None,
+            closed: false,
         }
     }
 
@@ -1212,7 +1247,10 @@ mod tests {
         s.side.select(Some(2));
         assert_eq!(
             s.on_key(KeyCode::Enter),
-            vec![Effect::LoadTasks(Source::List(s.lists[0].clone()))]
+            vec![Effect::LoadTasks {
+                source: Source::List(s.lists[0].clone()),
+                closed: false,
+            }]
         );
         assert_eq!(s.source, Source::List(s.lists[0].clone()));
     }
@@ -1462,5 +1500,28 @@ mod tests {
         ))));
         assert_eq!(s.me, Some(7));
         assert!(s.expanded.contains("s:Space"));
+    }
+}
+
+#[cfg(test)]
+mod closed_tests {
+    use super::*;
+
+    #[test]
+    fn closed_tasks_use_a_separate_key_and_load_when_missing() {
+        let mut s = BoardState::new();
+        s.tasks.insert("mine".into(), Vec::new());
+        assert!(!s.show_closed);
+        assert_eq!(
+            s.on_key(KeyCode::Char('C')),
+            vec![Effect::LoadTasks {
+                source: Source::Mine,
+                closed: true,
+            }]
+        );
+        assert!(s.show_closed);
+        s.tasks.insert("mine#closed".into(), vec![]);
+        assert!(s.on_key(KeyCode::Char('C')).is_empty());
+        assert!(!s.show_closed);
     }
 }

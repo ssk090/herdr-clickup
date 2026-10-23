@@ -190,18 +190,28 @@ impl ClickUp {
     }
 
     /// Open tasks assigned to the token's user in the `spaces` given (all when empty), most recently updated first.
-    pub fn my_tasks(&self, spaces: &[String]) -> Result<Vec<Task>> {
+    pub fn my_tasks(&self, spaces: &[String], include_closed: bool) -> Result<Vec<Task>> {
         let (team, me) = (self.team_id()?, self.my_user_id()?);
         let only: String = spaces.iter().map(|s| format!("&space_ids[]={s}")).collect();
+        let closed = if include_closed {
+            "&include_closed=true"
+        } else {
+            ""
+        };
         self.all_tasks(&format!(
-            "/team/{team}/task?assignees[]={me}&subtasks=true&order_by=updated{only}"
+            "/team/{team}/task?assignees[]={me}&subtasks=true&order_by=updated{only}{closed}"
         ))
     }
 
-    /// Open tasks in one list, subtasks and tasks added from other lists (as sprints do) included.
-    pub fn list_tasks(&self, list_id: &str) -> Result<Vec<Task>> {
+    /// Tasks in one list, subtasks and tasks added from other lists (as sprints do) included.
+    pub fn list_tasks(&self, list_id: &str, include_closed: bool) -> Result<Vec<Task>> {
+        let closed = if include_closed {
+            "&include_closed=true"
+        } else {
+            ""
+        };
         self.all_tasks(&format!(
-            "/list/{list_id}/task?subtasks=true&include_timl=true&order_by=updated"
+            "/list/{list_id}/task?subtasks=true&include_timl=true&order_by=updated{closed}"
         ))
     }
 

@@ -62,7 +62,7 @@ fn run(cmd: &str, rest: &[String]) -> Result<()> {
         // Plumbing.
         "list" => {
             let (cfg, cu) = client()?;
-            for t in cu.my_tasks(&cfg.space_ids)? {
+            for t in cu.my_tasks(&cfg.space_ids, false)? {
                 println!("{}\t[{}]\t{}", t.id, t.status, t.name);
             }
             Ok(())
@@ -121,7 +121,7 @@ fn run(cmd: &str, rest: &[String]) -> Result<()> {
 fn picker() -> Result<()> {
     let (cfg, cu) = client()?;
     println!("Loading your ClickUp tasks…");
-    let tasks = cu.my_tasks(&cfg.space_ids)?;
+    let tasks = cu.my_tasks(&cfg.space_ids, false)?;
     if tasks.is_empty() {
         bail!("no open tasks are assigned to you");
     }
