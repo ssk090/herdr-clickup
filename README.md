@@ -105,6 +105,11 @@ A status is never set directly. The plugin drafts it, and posts it only when you
 Status names are per ClickUp space; a status that does not exist is skipped with a warning
 (see `herdr plugin log list --plugin ssk090.clickup`).
 
+Settings come from the plugin's `.env`. The process environment is a fallback for values that `.env`
+does not set. An empty status value in `.env` turns that status off. If `CLICKUP_TOKEN` is set in both
+places and differs, the plugin prints a warning and uses the `.env` token.
+
+
 Bind keys in `~/.config/herdr/config.toml`:
 
 ```toml
