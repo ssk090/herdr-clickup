@@ -1,3 +1,4 @@
+use crate::json::{at, text};
 use anyhow::{Context, Result, anyhow};
 use serde_json::Value;
 use std::{collections::HashSet, env, process::Command};
@@ -58,7 +59,7 @@ pub fn current_workspace() -> Option<String> {
     let ctx: Value = serde_json::from_str(&env::var("HERDR_PLUGIN_CONTEXT_JSON").ok()?).ok()?;
     ["/workspace_id", "/workspace/workspace_id", "/workspace/id"]
         .iter()
-        .find_map(|p| ctx.pointer(p).and_then(Value::as_str).map(str::to_string))
+        .find_map(|p| at(&ctx, p))
 }
 
 pub struct Worktree {
@@ -73,7 +74,7 @@ pub fn create_worktree(repo: &str, branch: &str, label: &str) -> Result<Worktree
     let r = call(&[
         "worktree", "create", "--cwd", repo, "--branch", branch, "--label", label, "--focus",
     ])?;
-    let field = |p: &str| r.pointer(p).and_then(Value::as_str).map(str::to_string);
+    let field = |p: &str| at(&r, p);
     Ok(Worktree {
         workspace_id: field("/workspace/workspace_id")
             .ok_or_else(|| anyhow!("worktree create: no workspace in {r}"))?,
@@ -94,7 +95,7 @@ pub fn create_workspace(cwd: &str, label: &str) -> Result<(String, String)> {
         label,
         "--no-focus",
     ])?;
-    let field = |p: &str| r.pointer(p).and_then(Value::as_str).map(str::to_string);
+    let field = |p: &str| at(&r, p);
     Ok((
         field("/workspace/workspace_id")
             .ok_or_else(|| anyhow!("workspace create: no workspace in {r}"))?,
@@ -114,14 +115,13 @@ pub fn remove_worktree_workspace(workspace_id: &str) -> Result<()> {
 
 /// The pane ids in a `pane list` result.
 pub fn parse_live_panes(v: &Value) -> HashSet<String> {
-    v.get("panes")
-        .and_then(Value::as_array)
-        .map(|a| {
-            a.iter()
-                .filter_map(|p| p.get("pane_id").and_then(Value::as_str).map(str::to_string))
-                .collect()
+    crate::json::arr(v, "panes")
+        .iter()
+        .filter_map(|p| {
+            let id = text(p, "pane_id");
+            (!id.is_empty()).then_some(id)
         })
-        .unwrap_or_default()
+        .collect()
 }
 
 /// Every pane the running Herdr still has.
@@ -140,7 +140,7 @@ pub fn open_worktree(path: &str, label: &str) -> Result<(String, String)> {
         label,
         "--no-focus",
     ])?;
-    let field = |p: &str| r.pointer(p).and_then(Value::as_str).map(str::to_string);
+    let field = |p: &str| at(&r, p);
     Ok((
         field("/workspace/workspace_id")
             .ok_or_else(|| anyhow!("worktree open: no workspace in {r}"))?,
@@ -158,9 +158,7 @@ pub fn start_agent(name: &str, kind: &str, pane: &str) -> Result<()> {
 
 /// The agent state in one `agent get` result: `idle`, `working`, `blocked`, `done` or `unknown`.
 pub fn parse_agent_status(v: &Value) -> Option<String> {
-    v.pointer("/agent/agent_status")
-        .and_then(Value::as_str)
-        .map(str::to_string)
+    at(v, "/agent/agent_status")
 }
 
 /// The live state of the agent in `pane`.

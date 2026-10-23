@@ -1,3 +1,4 @@
+use crate::json::{arr, num};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -26,21 +27,6 @@ pub fn parse_space_lists(space: &str, folders: &Value, folderless: &Value) -> Ve
         .iter()
         .filter_map(|l| list(space, None, l));
     in_folders.chain(loose).collect()
-}
-
-fn arr<'a>(v: &'a Value, key: &str) -> &'a [Value] {
-    v.get(key)
-        .and_then(Value::as_array)
-        .map(Vec::as_slice)
-        .unwrap_or_default()
-}
-
-/// ClickUp sends numbers as strings in some fields and as numbers in others.
-fn num(v: &Value, key: &str) -> Option<i64> {
-    match v.get(key)? {
-        Value::String(s) => s.parse().ok(),
-        n => n.as_i64(),
-    }
 }
 
 fn list(space: &str, folder: Option<String>, l: &Value) -> Option<ListRef> {

@@ -1,3 +1,4 @@
+use crate::json::{at, text};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -211,57 +212,54 @@ pub enum Decision {
 /// The event's name with dots turned into underscores: herdr sends `pane_agent_status_changed` while
 /// manifests subscribe with `pane.agent_status_changed`.
 fn event_name(event: &Value) -> String {
-    event
-        .get("event")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .replace('.', "_")
+    text(event, "event").replace('.', "_")
 }
 
 pub fn decide(event: &Value, state: &State) -> Decision {
     let name = event_name(event);
     if name == "worktree_removed" {
-        let Some(ws) = event.pointer("/data/workspace_id").and_then(Value::as_str) else {
+        let Some(ws) = at(event, "/data/workspace_id") else {
             return Decision::Nothing;
         };
         // Pane ids are `<workspace>:<pane>`.
-        let linked = state.panes.keys().any(|p| p.split(':').next() == Some(ws));
+        let linked = state
+            .panes
+            .keys()
+            .any(|p| p.split(':').next() == Some(ws.as_str()));
         return if linked {
-            Decision::ForgetWorkspace {
-                workspace_id: ws.to_string(),
-            }
+            Decision::ForgetWorkspace { workspace_id: ws }
         } else {
             Decision::Nothing
         };
     }
-    let Some(pane_id) = event.pointer("/data/pane_id").and_then(Value::as_str) else {
+    let Some(pane_id) = at(event, "/data/pane_id") else {
         return Decision::Nothing;
     };
-    let Some(link) = state.panes.get(pane_id) else {
+    let Some(link) = state.panes.get(&pane_id) else {
         return Decision::Nothing;
     };
-    let status = event.pointer("/data/agent_status").and_then(Value::as_str);
+    let status = at(event, "/data/agent_status");
     match name.as_str() {
-        "pane_agent_status_changed" if status == Some("working") && !link.working => {
+        "pane_agent_status_changed" if status.as_deref() == Some("working") && !link.working => {
             Decision::MarkWorking {
-                pane_id: pane_id.to_string(),
+                pane_id: pane_id.clone(),
             }
         }
         // idle is a finish herdr has already shown the user; done is one nobody has seen yet.
         "pane_agent_status_changed"
-            if matches!(status, Some("idle" | "done")) && link.working && !link.reported =>
+            if matches!(status.as_deref(), Some("idle" | "done"))
+                && link.working
+                && !link.reported =>
         {
             Decision::Report {
-                pane_id: pane_id.to_string(),
+                pane_id: pane_id.clone(),
                 task_id: link.task_id.clone(),
                 branch: link.branch.clone(),
                 change: link.change.clone(),
                 phase: link.phase(),
             }
         }
-        "pane_closed" => Decision::Forget {
-            pane_id: pane_id.to_string(),
-        },
+        "pane_closed" => Decision::Forget { pane_id },
         _ => Decision::Nothing,
     }
 }

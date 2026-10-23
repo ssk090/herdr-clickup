@@ -7,6 +7,7 @@ pub mod config;
 pub mod herdr;
 pub mod hierarchy;
 pub mod hook;
+pub mod json;
 pub mod link;
 pub mod openspec;
 pub mod report;
