@@ -211,6 +211,11 @@ fn a_link_written_before_phases_existed_reads_its_phase_from_the_change() {
     assert_eq!(spec.phase(), Phase::SpecDrafting);
     let code: Link = serde_json::from_value(json!({ "task_id": "1", "branch": "b" })).unwrap();
     assert_eq!(code.phase(), Phase::Implementing);
+    let finished: Link = serde_json::from_value(
+        json!({ "task_id": "1", "branch": "b", "change": "c", "reported": true }),
+    )
+    .unwrap();
+    assert_eq!(finished.phase(), Phase::SpecDrafted);
 }
 
 #[test]

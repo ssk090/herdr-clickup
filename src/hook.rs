@@ -38,15 +38,6 @@ pub enum Phase {
 }
 
 impl Phase {
-    /// Older links have no phase: a change means the spec was just drafted, no change means code.
-    pub fn of(change: Option<&str>, phase: Option<Phase>) -> Phase {
-        phase.unwrap_or(if change.is_some() {
-            Phase::SpecDrafting
-        } else {
-            Phase::Implementing
-        })
-    }
-
     /// Short label for the board's phase column.
     pub fn label(self) -> &'static str {
         match self {
@@ -67,8 +58,14 @@ impl Phase {
 }
 
 impl Link {
+    /// Older links have no phase. A change that was already reported means the spec is drafted; a
+    /// change that was not means the spec is still being written; no change means a code start.
     pub fn phase(&self) -> Phase {
-        Phase::of(self.change.as_deref(), self.phase)
+        self.phase.unwrap_or(match (self.change.is_some(), self.reported) {
+            (true, false) => Phase::SpecDrafting,
+            (true, true) => Phase::SpecDrafted,
+            (false, _) => Phase::Implementing,
+        })
     }
 
     /// Moves the link past a report the user has not approved yet.

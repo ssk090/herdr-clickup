@@ -9,8 +9,8 @@ agent events into ClickUp drafts. The board reads the state file every second.
 
 - **The phase lives on the link, not in a separate store.** The hook and the board already share
   the link, and one task has one pane. No new file, no extra ClickUp call.
-- **The phase is optional.** Old `panes.json` files have no phase. `Phase::of` reads a change as
-  "spec drafting" and no change as "implementing", which is what those links meant before.
+- **The phase is optional.** Old `panes.json` files have no phase. A change means the spec phase:
+  drafting until its report was written, then drafted. No change means a code start.
 - **`i` changes the link before it prompts the agent.** A fast status event then cannot arrive
   before the link expects an implementation, which would lose the finish.
 - **The board reads the phase from the state file.** It already reloads the file every second for
