@@ -1,6 +1,6 @@
 id = "ssk090.clickup"
 name = "ClickUp"
-version = "0.1.0"
+version = "0.2.0"
 # Verified on 0.9.5; 0.9.3 is the first with the event JSON shape the hook reads.
 min_herdr_version = "0.9.3"
 description = "Pick your ClickUp tasks, start an agent on one in its own worktree, and report back when it is done."
