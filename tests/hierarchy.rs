@@ -17,14 +17,14 @@ fn folders() -> serde_json::Value {
 #[test]
 fn flattens_folder_and_folderless_lists() {
     let folderless = json!({ "lists": [{ "id": "l3", "name": "Inbox" }] });
-    let lists = parse_space_lists("Chip1", &folders(), &folderless);
+    let lists = parse_space_lists("Demo Co", &folders(), &folderless);
     assert_eq!(
         lists,
         vec![
             ListRef {
                 id: "l1".into(),
                 name: "Sprint 17 (10/20 - 10/26)".into(),
-                space: "Chip1".into(),
+                space: "Demo Co".into(),
                 folder: Some("Weekly Sprints".into()),
                 start: Some(1792434600000),
                 due: Some(1793039399999),
@@ -33,7 +33,7 @@ fn flattens_folder_and_folderless_lists() {
             ListRef {
                 id: "l2".into(),
                 name: "Bugs".into(),
-                space: "Chip1".into(),
+                space: "Demo Co".into(),
                 folder: Some("Internal Defects".into()),
                 start: None,
                 due: None,
@@ -42,7 +42,7 @@ fn flattens_folder_and_folderless_lists() {
             ListRef {
                 id: "l3".into(),
                 name: "Inbox".into(),
-                space: "Chip1".into(),
+                space: "Demo Co".into(),
                 folder: None,
                 start: None,
                 due: None,

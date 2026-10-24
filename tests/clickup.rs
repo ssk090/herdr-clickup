@@ -57,14 +57,14 @@ fn a_custom_id_adds_the_team_and_the_flag() {
 #[test]
 fn workspaces_keep_their_ids_and_names() {
     let v = json!({ "teams": [
-        { "id": "901", "name": "Chip1" },
+        { "id": "901", "name": "Demo Co" },
         { "id": "902", "name": "Other" },
         { "no": "id" }
     ]});
     assert_eq!(
         parse_teams(&v),
         [
-            ("901".to_string(), "Chip1".to_string()),
+            ("901".to_string(), "Demo Co".to_string()),
             ("902".to_string(), "Other".to_string())
         ]
     );

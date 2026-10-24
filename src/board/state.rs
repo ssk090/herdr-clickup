@@ -537,7 +537,7 @@ mod tests {
             subtasks: Vec::new(),
             attachments: Vec::new(),
             comments: vec![Comment {
-                user: "Deepti".into(),
+                user: "Sam Lee".into(),
                 date_ms: 0,
                 text: "Retry 3 times.".into(),
             }],
@@ -566,7 +566,7 @@ mod tests {
         let mut s = state_with(vec![Task {
             assignees: vec![Assignee {
                 id: 7,
-                username: "Deepti".into(),
+                username: "Sam Lee".into(),
             }],
             ..task("1", "one")
         }]);
