@@ -12,7 +12,7 @@ fn sample() -> serde_json::Value {
         "status": { "status": "to do", "color": "#d3d3d3", "type": "open" },
         "url": "https://app.clickup.com/t/86c1abcd",
         "list": { "id": "901", "name": "Sprint" },
-        "assignees": [{ "id": 61481949, "username": "Shivananda Sai" }, { "id": 7, "username": null }]
+        "assignees": [{ "id": 61481949, "username": "Alex Doe" }, { "id": 7, "username": null }]
     })
 }
 
@@ -29,7 +29,7 @@ fn parses_a_single_task() {
             assignees: vec![
                 Assignee {
                     id: 61481949,
-                    username: "Shivananda Sai".into()
+                    username: "Alex Doe".into()
                 },
                 Assignee {
                     id: 7,

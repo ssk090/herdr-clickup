@@ -49,8 +49,8 @@ fn task_folders_live_under_the_herdr_home() {
 
 #[test]
 fn repo_names_come_from_the_last_path_segment() {
-    assert_eq!(repo_name("/w/chip1-webui/"), "chip1-webui");
-    assert_eq!(repo_name("chip1-api-hub"), "chip1-api-hub");
+    assert_eq!(repo_name("/w/webui/"), "webui");
+    assert_eq!(repo_name("api-hub"), "api-hub");
     assert_eq!(repo_name("/"), "repo");
 }
 

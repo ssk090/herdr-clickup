@@ -21,7 +21,7 @@ fn task() -> Task {
         description: "After login we land on /404.".into(),
         assignees: vec![Assignee {
             id: 7,
-            username: "Deepti".into(),
+            username: "Sam Lee".into(),
         }],
         list_id: Some("l1".into()),
         closed: false,

@@ -98,7 +98,7 @@ CLICKUP_TOKEN_CMD=secret-tool lookup service herdr-clickup
 | `CLICKUP_TOKEN_CMD` | (none) | Shell command that prints the token. It wins over `CLICKUP_TOKEN`. |
 | `CLICKUP_TEAM_ID` | first workspace | Default ClickUp workspace (team) id. `W` on the board remembers a choice that wins over this default. |
 | `CLICKUP_SPACE_IDS` | all spaces | Comma-separated space ids the board shows (the number after `/s/` in a space URL) |
-| `CLICKUP_AGENT` | claude | Agent offered first until you pick one |
+| `CLICKUP_AGENT` | first installed | Agent offered first until you pick one |
 | `CLICKUP_STATUS_STARTED` | `in progress` | Status drafted when a code start begins; empty to skip |
 | `CLICKUP_STATUS_DONE` | `review` | Status drafted when a code start's agent is done; empty to skip |
 | `CLICKUP_STATUS_SPEC` | (none) | Status drafted when a spec start begins and when its spec is drafted |
@@ -111,6 +111,10 @@ Status names are per ClickUp space; a status that does not exist is skipped with
 Settings come from the plugin's `.env`. The process environment is a fallback for values that `.env`
 does not set. An empty status value in `.env` turns that status off. If `CLICKUP_TOKEN` is set in both
 places and differs, the plugin prints a warning and uses the `.env` token.
+
+The plugin has no fixed workspace, space, status, agent or repo. You choose each one in the `.env`
+or on the board. See [docs/configuration.md](docs/configuration.md) for a full example and where to
+find the ids.
 
 
 Bind keys in `~/.config/herdr/config.toml`:

@@ -13,7 +13,7 @@ fn task_json() -> serde_json::Value {
         "text_content": "Similar to xCRM, the PO should include an Adjust Quantity button.",
         "status": { "status": "ready for eng review" },
         "url": "https://app.clickup.com/t/86bb29hug",
-        "assignees": [{ "id": 1, "username": "Shivananda Sai" }],
+        "assignees": [{ "id": 1, "username": "Alex Doe" }],
         "tags": [{ "name": "purchasing" }, { "name": "ui" }],
         "parent": "86parent",
         "custom_fields": [
@@ -34,7 +34,7 @@ fn task_json() -> serde_json::Value {
 
 fn comments_json() -> serde_json::Value {
     json!({ "comments": [
-        { "user": { "username": "Deepti Vaidyula" }, "date": "1790839457019", "comment_text": "Retry 3 times.\nThanks" }
+        { "user": { "username": "Sam Lee" }, "date": "1790839457019", "comment_text": "Retry 3 times.\nThanks" }
     ]})
 }
 
@@ -80,7 +80,7 @@ fn parses_the_whole_ticket() {
     assert_eq!(
         t.comments,
         [Comment {
-            user: "Deepti Vaidyula".into(),
+            user: "Sam Lee".into(),
             date_ms: 1790839457019,
             text: "Retry 3 times.\nThanks".into()
         }]
@@ -110,7 +110,7 @@ fn renders_the_ticket_as_markdown() {
 
 - ClickUp: https://app.clickup.com/t/86bb29hug
 - Status: ready for eng review
-- Assignees: Shivananda Sai
+- Assignees: Alex Doe
 - Tags: purchasing, ui
 - Parent task: 86parent
 
@@ -139,7 +139,7 @@ Similar to xCRM, the PO should include an Adjust Quantity button.
 
 ## Comments
 
-**Deepti Vaidyula** · 2026-10-01
+**Sam Lee** · 2026-10-01
 
 > Retry 3 times.
 > Thanks
