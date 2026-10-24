@@ -1,6 +1,9 @@
 # herdr-clickup
 
-A [herdr](https://herdr.dev) plugin for ClickUp:
+[![CI](https://github.com/ssk090/herdr-clickup/actions/workflows/ci.yml/badge.svg)](https://github.com/ssk090/herdr-clickup/actions/workflows/ci.yml)
+
+A [herdr](https://herdr.dev) plugin for ClickUp. The current release is
+[v0.2.0](https://github.com/ssk090/herdr-clickup/releases/tag/v0.2.0).
 
 - **Board** (`prefix+u`): a tab with your current sprints and every space → folder → list on the left,
   and the selected list's tasks on the right.
@@ -35,14 +38,14 @@ A [herdr](https://herdr.dev) plugin for ClickUp:
 - If the agent asks something at startup (e.g. "trust this folder?"), answer it in the new
   workspace; the plugin waits and then sends the task. It never answers for you.
 - **Every ClickUp write is a draft, only with your approval**: a start drafts its status change
-  ("in progress", or the spec status), and a finish drafts a comment plus a status ("spec drafted" for a
-  spec start; "implementation done" plus a move to *review* for a code start). **Nothing is posted
-  automatically.** The drafted comment lists the branch's commits and changed files for code, or the
-  The detail view loads the task's comments. `t` lists the list's statuses, and the chosen status opens
-  a status-only draft that you approve.
-  proposal's Why and task count for a spec. On the board the task gets a ✉; press `u` to read the exact
-  comment and status, `e` to edit it in `$EDITOR` (the edit is saved), `⏎` to post it, `d` to discard
-  it, `esc` to decide later. A status-only draft posts no comment.
+  ("in progress", or the spec status), and a finish drafts a comment plus a status ("spec drafted"
+  for a spec start, "implementation done" plus a move to *review* for a code start). **Nothing is
+  posted automatically.** The drafted comment lists the branch's commits and changed files for code,
+  or the proposal's Why and task count for a spec. On the board the task gets a ✉. Press `u` to read
+  the exact comment and status, `e` to edit it in `$EDITOR` (the edit is saved), `⏎` to post it, `d`
+  to discard it, or `esc` to decide later. A status-only draft posts no comment.
+- **Task detail**: `⏎` loads the task's comments with author and date. `t` lists the list's
+  statuses, and the chosen status opens a status-only draft that you approve.
 - **Links**: Ctrl-click an `app.clickup.com/t/...` link in a terminal to open the task. Custom task
   ids such as `ABC-123` work in a link and in `start`: the plugin sends `custom_task_ids=true` with
   the team id.
@@ -139,7 +142,9 @@ manual Linux checklist is in [docs/linux.md](docs/linux.md).
 
 ## CLI
 
-`bin/run.sh list` prints your tasks; `bin/run.sh start [--code] <task-id> [agent] [repo[,repo]]` starts one without the picker (spec first unless `--code`). The picker and the clicked-task pane ask for one or more repos.
+`bin/run.sh list` prints your tasks. `bin/run.sh start [--code] <task-id> [agent] [repo[,repo]]`
+starts one without the picker (spec first unless `--code`). The picker and the clicked-task pane ask
+for one or more repos. `bin/run.sh reconcile` drops links to panes that no longer exist.
 
 ## Develop
 
@@ -164,6 +169,9 @@ State (pane → task links: branch, phase, repos) lives in `$HERDR_PLUGIN_STATE_
 Multi-repo task folders live in `~/.herdr/tasks/`.
 
 ## Releases
+
+The current release is [v0.2.0](https://github.com/ssk090/herdr-clickup/releases/tag/v0.2.0). See
+[CHANGELOG.md](CHANGELOG.md) for the changes in each version.
 
 The version lives in `Cargo.toml` and `herdr-plugin.toml`, and a test fails when they differ. To
 release, bump both files, add the changes under `## [Unreleased]` in `CHANGELOG.md`, commit, then tag
